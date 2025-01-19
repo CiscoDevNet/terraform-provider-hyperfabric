@@ -245,33 +245,6 @@ resource "hyperfabric_node_sub_interface" "test" {
 	annotations    = []
 }
 `, fabricName)
-	} else if configType == "minimal+" {
-		return fmt.Sprintf(`
-resource "hyperfabric_fabric" "test" {
-	name = "%[1]s"
-}
-
-resource "hyperfabric_vrf" "test" {
-    fabric_id = hyperfabric_fabric.test.id
-	name      = "Vrf1"
-}
-
-resource "hyperfabric_vrf" "test2" {
-    fabric_id = hyperfabric_fabric.test.id
-	name      = "Vrf2"
-}
-
-resource "hyperfabric_node" "test" {
-	fabric_id  = hyperfabric_fabric.test.id
-	name       = "node1"
-	model_name = "HF6100-32D"
-}
-
-resource "hyperfabric_node_sub_interface" "test" {
-	node_id = hyperfabric_node.test.id
-	name    = "Ethernet1_1.100"
-}
-`, fabricName)
 	} else {
 		return fmt.Sprintf(`
 resource "hyperfabric_fabric" "test" {
