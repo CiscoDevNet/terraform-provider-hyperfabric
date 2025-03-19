@@ -14,7 +14,7 @@ any real-time space e.g., WebEx, Slack, Discord, etc.
 ## Reporting Issues
 
 Before reporting a new issue, please ensure that the issue was not already reported or fixed by searching through our
-[issues list](https://github.com/cisco-open/terraform-provider-hyperfabric/issues).
+[issues list](https://github.com/CiscoDevNet/terraform-provider-hyperfabric/issues).
 
 When creating a new issue, please be sure to include a **title and clear description**, as much relevant information as
 possible, including a terraform log file (run with TF_LOG=TRACE), if relevant, a terraform crash.log file and, if possible, a test case.

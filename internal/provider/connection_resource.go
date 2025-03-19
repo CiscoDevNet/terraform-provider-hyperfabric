@@ -12,8 +12,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CiscoDevNet/terraform-provider-hyperfabric/internal/client"
+	customTypes "github.com/CiscoDevNet/terraform-provider-hyperfabric/internal/provider/custom_types"
 	"github.com/Jeffail/gabs/v2"
-	"github.com/cisco-open/terraform-provider-hyperfabric/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"

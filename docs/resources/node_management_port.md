@@ -56,7 +56,7 @@ resource "hyperfabric_node_management_port" "full_example_node_management_port" 
 ## Schema ##
 
 ### Required ###
-* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source.
+* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source.
 
 ### Optional ###
   

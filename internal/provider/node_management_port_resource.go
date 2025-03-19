@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CiscoDevNet/terraform-provider-hyperfabric/internal/client"
 	"github.com/Jeffail/gabs/v2"
-	"github.com/cisco-open/terraform-provider-hyperfabric/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"

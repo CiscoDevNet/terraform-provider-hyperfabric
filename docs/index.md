@@ -29,7 +29,7 @@ The generated bearer token authenticates the account it was created with, and on
 terraform {
   required_providers {
     hyperfabric = {
-      source = "cisco-open/hyperfabric"
+      source = "CiscoDevNet/hyperfabric"
     }
   }
 }

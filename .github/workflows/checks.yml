@@ -60,7 +60,7 @@ jobs:
 
   acceptance:
     name: Acceptance Tests
-    if: github.repository_owner == 'cisco-open'
+    if: github.repository_owner == 'CiscoDevNet'
     needs: [build, diff]
     runs-on: ubuntu-latest
     env:
@@ -78,7 +78,7 @@ jobs:
           terraform_version: '1.7.*'
           terraform_wrapper: false
       - name: Terraform Acceptance Test
-        run: go test github.com/cisco-open/terraform-provider-hyperfabric/internal/provider -v -race -timeout 300m -coverprofile=coverage.out -covermode=atomic
+        run: go test github.com/CiscoDevNet/terraform-provider-hyperfabric/internal/provider -v -race -timeout 300m -coverprofile=coverage.out -covermode=atomic
         env:
           TF_ACC: '1'
           TF_ACC_STATE_LINEAGE: '1'

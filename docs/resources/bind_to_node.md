@@ -35,8 +35,8 @@ resource "hyperfabric_bind_to_node" "example_bind_to_node" {
 ## Schema ##
 
 ### Required ###
-* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source.
-* `device_id` - (string) The unique identifier (id) of a Device in a Fabric. Use the id attribute of the [hyperfabric_device](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/device) resource or [hyperfabric_device](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/device) data source.
+* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source.
+* `device_id` - (string) The unique identifier (id) of a Device in a Fabric. Use the id attribute of the [hyperfabric_device](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/device) resource or [hyperfabric_device](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/device) data source.
 
 ### Read-Only ###
 

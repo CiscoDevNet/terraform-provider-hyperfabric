@@ -86,7 +86,7 @@ resource "hyperfabric_vni" "full_example_vni" {
 ## Schema ##
 
 ### Required ###
-* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/fabric) data source.
+* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/fabric) data source.
 * `name` - (string) The name of the VNI.
 
 ### Optional ###
@@ -97,13 +97,13 @@ resource "hyperfabric_vni" "full_example_vni" {
 
   #### Required ####
 
-  * `node_id` - (string) The unique identifier (nodeId) of the Node. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source or "*" for all Nodes.
+  * `node_id` - (string) The unique identifier (nodeId) of the Node. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source or "*" for all Nodes.
   * `port_name` - (string) The name of the Port or "*" for all ports on a Node or all Nodes.
 
   #### Read-Only ####
 
   * `node_name` - (string) The name of the Node referenced by `node_id` for this member.
-* `vrf_id` - (string) The unique identifier (vrfId) of the VRF. Use the vrf_id attribute of the [hyperfabric_vrf](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/vrf) resource or [hyperfabric_vrf](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/vrf) data source.
+* `vrf_id` - (string) The unique identifier (vrfId) of the VRF. Use the vrf_id attribute of the [hyperfabric_vrf](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/vrf) resource or [hyperfabric_vrf](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/vrf) data source.
 * `svi` - (map) A map of the attributes of the SVI for the VNI. Requires `vrf_id` to also be set.
 
   #### Required At Least One Of ####

@@ -66,7 +66,7 @@ resource "hyperfabric_node" "full_example_node" {
 ## Schema ##
 
 ### Required ###
-* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/fabric) data source.
+* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/fabric) data source.
 * `name` - (string) The name of the Node. The name is used as hostname for the Node and need to comply with DNS restrictions and must be unique in the Fabric.
 * `model_name` - (string) The name of model of the Node.
   - Valid Values: `HF6100-32D`, `HF6100-60L4D`.
