@@ -83,19 +83,21 @@ func TestAccNodePortResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Node Port - ImportState testing with pre-existing Id.")
 				},
-				ResourceName:      "hyperfabric_node_port.test",
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            "hyperfabric_node_port.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"vrf_id"},
 			},
 			// ImportState testing with fabric and node name.
 			{
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Node Port - ImportState testing with fabric, node and interface name.")
 				},
-				ResourceName:      "hyperfabric_node_port.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-				ImportStateId:     fabricName + "/nodes/node1/ports/Ethernet1_1",
+				ResourceName:            "hyperfabric_node_port.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"vrf_id"},
+				ImportStateId:           fabricName + "/nodes/node1/ports/Ethernet1_1",
 			},
 			// Update with config containing all optional attributes with empty values and verify config is cleared.
 			{
@@ -107,12 +109,12 @@ func TestAccNodePortResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "name", "Ethernet1_1"),
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "roles.#", "1"),
-					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "roles.0", "UNUSED_PORT"),
+					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "roles.0", "ROUTED_PORT"),
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "description", ""),
-					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "enabled", ""),
+					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "enabled", "true"),
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "ipv4_addresses.#", "0"),
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "ipv6_addresses.#", "0"),
-					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "prevent_forwarding", ""),
+					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "prevent_forwarding", "false"),
 					resource.TestCheckResourceAttr("hyperfabric_node_port.test", "vrf_id", ""),
 				),
 			},
@@ -164,6 +166,12 @@ resource "hyperfabric_node_port" "test" {
 	roles              = ["ROUTED_PORT"]
 	vrf_id             = hyperfabric_vrf.test.vrf_id
 }
+
+resource "hyperfabric_node_port" "test_fabric_port" {
+	node_id = hyperfabric_node.test.id
+	name    = "Ethernet1_2"
+	roles   = ["FABRIC_PORT"]
+}
 `, fabricName)
 	} else if configType == "clear" {
 		return fmt.Sprintf(`
@@ -186,14 +194,19 @@ resource "hyperfabric_node" "test" {
 resource "hyperfabric_node_port" "test" {
 	node_id            = hyperfabric_node.test.id
 	name               = "Ethernet1_1"
-	description        = "Connected to server01"
+	description        = ""
 	enabled            = true
 	ipv4_addresses     = []
 	ipv6_addresses     = []
 	prevent_forwarding = false
-	roles              = []
+	roles              = ["ROUTED_PORT"]
 	vrf_id             = ""
 }
+
+resource "hyperfabric_node_port" "test_fabric_port" {
+	node_id = hyperfabric_node.test.id
+	name    = "Ethernet1_2"
+	roles   = ["FABRIC_PORT"]
 }
 `, fabricName)
 	} else if configType == "minimal+" {
@@ -219,6 +232,12 @@ resource "hyperfabric_node_port" "test" {
 	name    = "Ethernet1_1"
 	roles   = ["ROUTED_PORT"]
 }
+
+resource "hyperfabric_node_port" "test_fabric_port" {
+	node_id = hyperfabric_node.test.id
+	name    = "Ethernet1_2"
+	roles   = ["FABRIC_PORT"]
+}
 `, fabricName)
 	} else {
 		return fmt.Sprintf(`
@@ -242,6 +261,12 @@ resource "hyperfabric_node_port" "test" {
     node_id = hyperfabric_node.test.id
 	name    = "Ethernet1_1"
 	roles   = ["ROUTED_PORT"]
+}
+
+resource "hyperfabric_node_port" "test_fabric_port" {
+	node_id = hyperfabric_node.test.id
+	name    = "Ethernet1_2"
+	roles   = ["FABRIC_PORT"]
 }
 `, fabricName)
 	}

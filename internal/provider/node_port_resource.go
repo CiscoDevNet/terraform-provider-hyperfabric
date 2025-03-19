@@ -615,6 +615,24 @@ func (r *NodePortResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	tflog.Debug(ctx, fmt.Sprintf("Delete of resource hyperfabric_node_port with id '%s'", data.Id.ValueString()))
 	checkAndSetNodePortIds(data)
+
+	for _, role := range getSetStringJsonPayload(ctx, data.Roles) {
+		if role == "FABRIC_PORT" {
+			data.Roles = NewSetString(ctx, append(make([]interface{}, 0), "UNUSED_PORT"))
+			jsonPayload := getNodePortJsonPayload(ctx, &resp.Diagnostics, data, "update")
+
+			if resp.Diagnostics.HasError() {
+				return
+			}
+
+			DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/ports/%s", data.NodeId.ValueString(), data.Name.ValueString()), "PUT", jsonPayload)
+
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+	}
+
 	DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/ports/%s", data.NodeId.ValueString(), data.Name.ValueString()), "DELETE", nil)
 	if resp.Diagnostics.HasError() {
 		return
@@ -624,6 +642,17 @@ func (r *NodePortResource) Delete(ctx context.Context, req resource.DeleteReques
 
 func (r *NodePortResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	tflog.Debug(ctx, "Start import state of resource: hyperfabric_node_port")
+	newNodePort := getEmptyNodePortResourceModel()
+	newNodePort.Id = basetypes.NewStringValue(req.ID)
+	checkAndSetNodePortIds(newNodePort)
+	node := getEmptyNodeResourceModel()
+	node.Id = newNodePort.NodeId
+	checkAndSetNodeIds(node)
+	newFabric := getEmptyFabricResourceModel()
+	newFabric.Id = node.FabricId
+	getAndSetFabricAttributes(ctx, &resp.Diagnostics, r.client, newFabric)
+	node.FabricId = newFabric.Id
+	req.ID = node.FabricId.ValueString() + "/nodes/" + node.NodeId.ValueString() + "/ports/" + newNodePort.PortId.ValueString()
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 	var stateData *NodePortResourceModel
 	resp.Diagnostics.Append(resp.State.Get(ctx, &stateData)...)
@@ -646,15 +675,16 @@ func getAndSetNodePortAttributes(ctx context.Context, diags *diag.Diagnostics, c
 		for attributeName, attributeValue := range requestData.Data().(map[string]interface{}) {
 			if attributeName == "id" && (data.PortId.IsNull() || data.PortId.IsUnknown() || data.PortId.ValueString() == "" || data.PortId.ValueString() != attributeValue.(string)) {
 				newNodePort.PortId = basetypes.NewStringValue(attributeValue.(string))
+				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
 				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
 			} else if attributeName == "fabricId" && (node.FabricId.IsNull() || node.FabricId.IsUnknown() || node.FabricId.ValueString() == "" || node.FabricId.ValueString() != attributeValue.(string)) {
 				node.FabricId = basetypes.NewStringValue(attributeValue.(string))
 				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
+				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
 			} else if attributeName == "nodeId" && (node.NodeId.IsNull() || node.NodeId.IsUnknown() || node.NodeId.ValueString() == "" || node.NodeId.ValueString() != attributeValue.(string)) {
 				node.NodeId = basetypes.NewStringValue(attributeValue.(string))
 				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
+				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
 			} else if attributeName == "name" {
 				newNodePort.Name = basetypes.NewStringValue(attributeValue.(string))
 			} else if attributeName == "description" {
