@@ -190,6 +190,27 @@ func (m setToObjectNullWhenStateIsNullPlanIsUnknownDuringUpdate) PlanModifyObjec
 	}
 }
 
+type compareUuidWithIdForEquality struct{}
+
+func CompareUuidWithIdForEquality() planmodifier.String {
+	return compareUuidWithIdForEquality{}
+}
+
+func (m compareUuidWithIdForEquality) Description(_ context.Context) string {
+	return "Compare the user provided value with existing state when stripping everything before the last / to get the last UUID part."
+}
+
+func (m compareUuidWithIdForEquality) MarkdownDescription(_ context.Context) string {
+	return "Compare the user provided value with existing state when stripping everything before the last / to get the last UUID part."
+}
+
+// Custom plan modifier to compare provided value between UUID and id
+func (m compareUuidWithIdForEquality) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if !req.State.Raw.IsNull() && !req.StateValue.IsNull() && !req.PlanValue.IsUnknown() {
+		resp.PlanValue = customTypes.GetUuidStringValueFromId(req.PlanValue)
+	}
+}
+
 // MakeStringRequiredValidator validates that an attribute is not null, as a workaround for when a resource has read-only attributes and nested sets with required attributes
 // https://github.com/hashicorp/terraform-plugin-framework/issues/898
 

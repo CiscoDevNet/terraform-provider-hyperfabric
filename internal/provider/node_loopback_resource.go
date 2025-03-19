@@ -47,12 +47,12 @@ type NodeLoopbackResourceModel struct {
 	Name        types.String `tfsdk:"name"`
 	Description types.String `tfsdk:"description"`
 	// Enabled     types.Bool   `tfsdk:"enabled"`
-	Ipv4Address types.String `tfsdk:"ipv4_address"`
-	Ipv6Address types.String `tfsdk:"ipv6_address"`
-	VrfId       types.String `tfsdk:"vrf_id"`
-	Metadata    types.Object `tfsdk:"metadata"`
-	Labels      types.Set    `tfsdk:"labels"`
-	Annotations types.Set    `tfsdk:"annotations"`
+	Ipv4Address types.String                      `tfsdk:"ipv4_address"`
+	Ipv6Address types.String                      `tfsdk:"ipv6_address"`
+	VrfId       customTypes.UuidFromIdStringValue `tfsdk:"vrf_id"`
+	Metadata    types.Object                      `tfsdk:"metadata"`
+	Labels      types.Set                         `tfsdk:"labels"`
+	Annotations types.Set                         `tfsdk:"annotations"`
 }
 
 func getEmptyNodeLoopbackResourceModel() *NodeLoopbackResourceModel {
@@ -65,7 +65,7 @@ func getEmptyNodeLoopbackResourceModel() *NodeLoopbackResourceModel {
 		// Enabled:     basetypes.NewBoolValue(false),
 		Ipv4Address: basetypes.NewStringNull(),
 		Ipv6Address: basetypes.NewStringNull(),
-		VrfId:       basetypes.NewStringNull(),
+		VrfId:       customTypes.NewUuidFromIdStringNull(),
 		Metadata:    basetypes.NewObjectNull(MetadataResourceModelAttributeType()),
 		Labels:      basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		Annotations: basetypes.NewSetNull(AnnotationResourceModelAttributeType()),
@@ -208,12 +208,14 @@ func (r *NodeLoopbackResource) Schema(ctx context.Context, req resource.SchemaRe
 				},
 			},
 			"vrf_id": schema.StringAttribute{
+				CustomType:          customTypes.UuidFromIdStringType{},
 				MarkdownDescription: "The `vrf_id` of a VRF to associate with the Loopback of the Node.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					SetToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate(),
+					CompareUuidWithIdForEquality(),
 				},
 			},
 			"metadata":    getMetadataSchemaAttribute(),
@@ -409,7 +411,7 @@ func getAndSetNodeLoopbackAttributes(ctx context.Context, diags *diag.Diagnostic
 			} else if attributeName == "ipv6Address" {
 				newNodeLoopback.Ipv6Address = basetypes.NewStringValue(attributeValue.(string))
 			} else if attributeName == "vrfId" {
-				newNodeLoopback.VrfId = basetypes.NewStringValue(attributeValue.(string))
+				newNodeLoopback.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
 			} else if attributeName == "metadata" {
 				newNodeLoopback.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
 			} else if attributeName == "labels" {

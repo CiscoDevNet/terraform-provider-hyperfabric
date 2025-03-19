@@ -55,25 +55,25 @@ type NodePortResourceModel struct {
 	Enabled     types.Bool   `tfsdk:"enabled"`
 	// Breakout           types.Bool    `tfsdk:"breakout"`
 	// BreakoutIndex      types.Float64 `tfsdk:"breakout_index"`
-	Index              types.Float64 `tfsdk:"index"`
-	Ipv4Addresses      types.Set     `tfsdk:"ipv4_addresses"`
-	Ipv6Addresses      types.Set     `tfsdk:"ipv6_addresses"`
-	Linecard           types.Float64 `tfsdk:"linecard"`
-	PreventForwarding  types.Bool    `tfsdk:"prevent_forwarding"`
-	LldpHost           types.String  `tfsdk:"lldp_host"`
-	LldpInfo           types.String  `tfsdk:"lldp_info"`
-	LldpPort           types.String  `tfsdk:"lldp_port"`
-	MaxSpeed           types.String  `tfsdk:"max_speed"`
-	Mtu                types.Float64 `tfsdk:"mtu"`
-	Roles              types.Set     `tfsdk:"roles"`
-	Speed              types.String  `tfsdk:"speed"`
-	SubInterfacesCount types.Float64 `tfsdk:"sub_interfaces_count"`
-	VlanIds            types.Set     `tfsdk:"vlan_ids"`
-	Vnis               types.Set     `tfsdk:"vnis"`
-	VrfId              types.String  `tfsdk:"vrf_id"`
-	Metadata           types.Object  `tfsdk:"metadata"`
-	Labels             types.Set     `tfsdk:"labels"`
-	Annotations        types.Set     `tfsdk:"annotations"`
+	Index              types.Float64                     `tfsdk:"index"`
+	Ipv4Addresses      types.Set                         `tfsdk:"ipv4_addresses"`
+	Ipv6Addresses      types.Set                         `tfsdk:"ipv6_addresses"`
+	Linecard           types.Float64                     `tfsdk:"linecard"`
+	PreventForwarding  types.Bool                        `tfsdk:"prevent_forwarding"`
+	LldpHost           types.String                      `tfsdk:"lldp_host"`
+	LldpInfo           types.String                      `tfsdk:"lldp_info"`
+	LldpPort           types.String                      `tfsdk:"lldp_port"`
+	MaxSpeed           types.String                      `tfsdk:"max_speed"`
+	Mtu                types.Float64                     `tfsdk:"mtu"`
+	Roles              types.Set                         `tfsdk:"roles"`
+	Speed              types.String                      `tfsdk:"speed"`
+	SubInterfacesCount types.Float64                     `tfsdk:"sub_interfaces_count"`
+	VlanIds            types.Set                         `tfsdk:"vlan_ids"`
+	Vnis               types.Set                         `tfsdk:"vnis"`
+	VrfId              customTypes.UuidFromIdStringValue `tfsdk:"vrf_id"`
+	Metadata           types.Object                      `tfsdk:"metadata"`
+	Labels             types.Set                         `tfsdk:"labels"`
+	Annotations        types.Set                         `tfsdk:"annotations"`
 }
 
 func getEmptyNodePortResourceModel() *NodePortResourceModel {
@@ -101,7 +101,7 @@ func getEmptyNodePortResourceModel() *NodePortResourceModel {
 		SubInterfacesCount: basetypes.NewFloat64Null(),
 		VlanIds:            basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		Vnis:               basetypes.NewSetNull(SetStringResourceModelAttributeType()),
-		VrfId:              basetypes.NewStringNull(),
+		VrfId:              customTypes.NewUuidFromIdStringNull(),
 		Metadata:           basetypes.NewObjectNull(MetadataResourceModelAttributeType()),
 		Labels:             basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		Annotations:        basetypes.NewSetNull(AnnotationResourceModelAttributeType()),
@@ -379,12 +379,14 @@ func (r *NodePortResource) Schema(ctx context.Context, req resource.SchemaReques
 			"vlan_ids": getVlanIdsSchemaAttribute(),
 			"vnis":     getVnisSchemaAttribute(),
 			"vrf_id": schema.StringAttribute{
+				CustomType:          customTypes.UuidFromIdStringType{},
 				MarkdownDescription: "The `vrf_id` of a VRF to associate with the Port of the Node. Required when the Port roles include `ROUTED_PORT`.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					SetToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate(),
+					CompareUuidWithIdForEquality(),
 				},
 			},
 			"metadata":    getMetadataSchemaAttribute(),
@@ -694,7 +696,7 @@ func getAndSetNodePortAttributes(ctx context.Context, diags *diag.Diagnostics, c
 			} else if attributeName == "vnis" {
 				newNodePort.Vnis = NewSetString(ctx, attributeValue.([]interface{}))
 			} else if attributeName == "vrfId" {
-				newNodePort.VrfId = basetypes.NewStringValue(attributeValue.(string))
+				newNodePort.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
 			} else if attributeName == "metadata" {
 				newNodePort.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
 			} else if attributeName == "labels" {

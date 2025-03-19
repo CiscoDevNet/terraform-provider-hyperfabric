@@ -26,7 +26,7 @@ func TestAccConnectionResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Connection - Create with minimum config and verify provided and default Hyperfabric values.")
 				},
-				Config:             testConnectionResourceHclConfig(fabricName, "minimal"),
+				Config:             testConnectionResourceHclConfig(fabricName, "minimal", ""),
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_connection.test", "local.port_name", "Ethernet1_1"),
@@ -40,7 +40,7 @@ func TestAccConnectionResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Connection - Update with all config and verify provided values.")
 				},
-				Config:             testConnectionResourceHclConfig(fabricName, "full"),
+				Config:             testConnectionResourceHclConfig(fabricName, "full", ""),
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_connection.test", "local.port_name", "Ethernet1_1"),
@@ -56,7 +56,7 @@ func TestAccConnectionResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Connection - Update with minimum config and verify config is unchanged.")
 				},
-				Config:             testConnectionResourceHclConfig(fabricName, "minimal"),
+				Config:             testConnectionResourceHclConfig(fabricName, "minimal", ""),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -92,7 +92,7 @@ func TestAccConnectionResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Connection - Update with config containing all optional attributes with empty values and verify config is cleared.")
 				},
-				Config:             testConnectionResourceHclConfig(fabricName, "clear"),
+				Config:             testConnectionResourceHclConfig(fabricName, "clear", ""),
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_connection.test", "local.port_name", "Ethernet1_1"),
@@ -108,7 +108,22 @@ func TestAccConnectionResource(t *testing.T) {
 				PreConfig: func() {
 					fmt.Println("= RUNNING: Connection - Run Plan Only with minimal config and check that plan is empty.")
 				},
-				Config:             testConnectionResourceHclConfig(fabricName, "minimal"),
+				Config:             testConnectionResourceHclConfig(fabricName, "minimal", ""),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("hyperfabric_connection.test", "local.port_name", "Ethernet1_1"),
+					resource.TestCheckResourceAttr("hyperfabric_connection.test", "local.node_name", "node1"),
+					resource.TestCheckResourceAttr("hyperfabric_connection.test", "remote.port_name", "Ethernet1_1"),
+					resource.TestCheckResourceAttr("hyperfabric_connection.test", "remote.node_name", "node2"),
+				),
+			},
+			// Run Plan Only with minimal config with id vs node_id and check that plan is empty.
+			{
+				PreConfig: func() {
+					fmt.Println("= RUNNING: Connection - Run Plan Only with minimal config with id vs node_id and check that plan is empty.")
+				},
+				Config:             testConnectionResourceHclConfig(fabricName, "minimal", "id"),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -122,7 +137,10 @@ func TestAccConnectionResource(t *testing.T) {
 	})
 }
 
-func testConnectionResourceHclConfig(fabricName string, configType string) string {
+func testConnectionResourceHclConfig(fabricName string, configType string, id string) string {
+	if id == "" {
+		id = "node_id"
+	}
 	if configType == "full" {
 		return fmt.Sprintf(`
 resource "hyperfabric_fabric" "test" {
@@ -143,7 +161,7 @@ resource "hyperfabric_node" "node2" {
 resource "hyperfabric_connection" "test" {
     fabric_id = hyperfabric_fabric.test.id
     local = {
-        node_id = hyperfabric_node.node1.node_id
+        node_id = hyperfabric_node.node1.%[2]s
         port_name = "Ethernet1_1"
     }
     remote = {
@@ -153,7 +171,7 @@ resource "hyperfabric_connection" "test" {
     description = "This connection is powered by Cisco Nexus Hyperfabric"
     pluggable = "QDD-400-AOC7M"
 }
-`, fabricName)
+`, fabricName, id)
 	} else if configType == "clear" {
 		return fmt.Sprintf(`
 resource "hyperfabric_fabric" "test" {
@@ -174,7 +192,7 @@ resource "hyperfabric_node" "node2" {
 resource "hyperfabric_connection" "test" {
     fabric_id = hyperfabric_fabric.test.id
     local = {
-        node_id = hyperfabric_node.node1.node_id
+        node_id = hyperfabric_node.node1.%[2]s
         port_name = "Ethernet1_1"
     }
     remote = {
@@ -184,7 +202,7 @@ resource "hyperfabric_connection" "test" {
     description = ""
     pluggable = ""
 }
-`, fabricName)
+`, fabricName, id)
 	} else {
 		return fmt.Sprintf(`
 resource "hyperfabric_fabric" "test" {
@@ -205,7 +223,7 @@ resource "hyperfabric_node" "node2" {
 resource "hyperfabric_connection" "test" {
     fabric_id = hyperfabric_fabric.test.id
     local = {
-        node_id = hyperfabric_node.node1.node_id
+        node_id = hyperfabric_node.node1.%[2]s
         port_name = "Ethernet1_1"
     }
     remote = {
@@ -213,7 +231,7 @@ resource "hyperfabric_connection" "test" {
         port_name = "Ethernet1_1"
     }
 }
-`, fabricName)
+`, fabricName, id)
 	}
 }
 

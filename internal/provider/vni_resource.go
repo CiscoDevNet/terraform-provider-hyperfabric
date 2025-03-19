@@ -51,14 +51,14 @@ type VniResourceModel struct {
 	Enabled     types.Bool   `tfsdk:"enabled"`
 	IsDefault   types.Bool   `tfsdk:"is_default"`
 	// IsL3        types.Bool    `tfsdk:"is_l3"`
-	VrfId       types.String  `tfsdk:"vrf_id"`
-	Vni         types.Float64 `tfsdk:"vni"`
-	Mtu         types.Float64 `tfsdk:"mtu"`
-	Members     types.Set     `tfsdk:"members"`
-	Svi         types.Object  `tfsdk:"svi"`
-	Metadata    types.Object  `tfsdk:"metadata"`
-	Labels      types.Set     `tfsdk:"labels"`
-	Annotations types.Set     `tfsdk:"annotations"`
+	VrfId       customTypes.UuidFromIdStringValue `tfsdk:"vrf_id"`
+	Vni         types.Float64                     `tfsdk:"vni"`
+	Mtu         types.Float64                     `tfsdk:"mtu"`
+	Members     types.Set                         `tfsdk:"members"`
+	Svi         types.Object                      `tfsdk:"svi"`
+	Metadata    types.Object                      `tfsdk:"metadata"`
+	Labels      types.Set                         `tfsdk:"labels"`
+	Annotations types.Set                         `tfsdk:"annotations"`
 }
 
 func getEmptyVniResourceModel() *VniResourceModel {
@@ -71,7 +71,7 @@ func getEmptyVniResourceModel() *VniResourceModel {
 		Enabled:     basetypes.NewBoolNull(),
 		IsDefault:   basetypes.NewBoolNull(),
 		// IsL3:        basetypes.NewBoolNull(),
-		VrfId:       basetypes.NewStringNull(),
+		VrfId:       customTypes.NewUuidFromIdStringNull(),
 		Vni:         basetypes.NewFloat64Null(),
 		Mtu:         basetypes.NewFloat64Null(),
 		Members:     basetypes.NewSetNull(MemberResourceModelAttributeType()),
@@ -261,12 +261,14 @@ func (r *VniResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 			// 	},
 			// },
 			"vrf_id": schema.StringAttribute{
+				CustomType:          customTypes.UuidFromIdStringType{},
 				MarkdownDescription: "The Id of the VRF associated with the VNI. Used when VNI is L3 (l2_only=false).",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					// SetToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate(),
+					CompareUuidWithIdForEquality(),
 				},
 			},
 			"vni": schema.Float64Attribute{
@@ -478,7 +480,7 @@ func getAndSetVniAttributes(ctx context.Context, diags *diag.Diagnostics, client
 				// } else if attributeName == "isL3" {
 				// 	newVni.IsL3 = basetypes.NewBoolValue(attributeValue.(bool))
 			} else if attributeName == "vrfId" {
-				newVni.VrfId = basetypes.NewStringValue(attributeValue.(string))
+				newVni.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
 			} else if attributeName == "vni" {
 				newVni.Vni = basetypes.NewFloat64Value(attributeValue.(float64))
 			} else if attributeName == "mtu" {
