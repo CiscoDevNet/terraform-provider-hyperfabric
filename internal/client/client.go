@@ -360,7 +360,6 @@ func (c *Client) MakeRestRequest(method string, path string, payloadContainer *g
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	// req.Header.Set("Cisco-FA-ShowEmpty", "true")
 
 	if c.skipLoggingPayload {
 		log.Printf("HTTP request %s %s", method, path)
