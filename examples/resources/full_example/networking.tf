@@ -1,6 +1,6 @@
 resource "hyperfabric_vrf" "vrf1" {
-  fabric_id   = hyperfabric_fabric.fab1.id
-  name        = "VRF1"
+  fabric_id = hyperfabric_fabric.fab1.id
+  name      = "VRF1"
 }
 
 resource "hyperfabric_vrf" "vrf2" {
@@ -21,8 +21,8 @@ resource "hyperfabric_vrf" "vrf2" {
     },
     {
       data_type = "STRING"
-      name  = "rack"
-      value = "AAA01"
+      name      = "rack"
+      value     = "AAA01"
     }
   ]
 }
@@ -50,10 +50,10 @@ resource "hyperfabric_vni" "vni2" {
 }
 
 resource "hyperfabric_vni" "vni3" {
-  fabric_id = hyperfabric_fabric.fab1.id
-  name      = "VNI3"
+  fabric_id   = hyperfabric_fabric.fab1.id
+  name        = "VNI3"
   description = "My Super New Third VNI3"
-  vni = 101
+  vni         = 101
   labels = [
     "Ohhhh",
     "Ahhh",
@@ -70,12 +70,12 @@ resource "hyperfabric_vni" "vni3" {
   }
   members = [
     {
-      node_id = "*"
+      node_id   = "*"
       port_name = "Ethernet1_10"
-      vlan_id = 103
+      vlan_id   = 103
     },
     {
-      node_id = hyperfabric_node.node2.node_id
+      node_id   = hyperfabric_node.node2.node_id
       port_name = "Ethernet1_11"
       vlan_id   = 103
     },

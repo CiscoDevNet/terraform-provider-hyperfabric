@@ -1,4 +1,4 @@
-<!-- ---
+---
 subcategory: "Administration"
 layout: "hyperfabric"
 page_title: "Nexus Hyperfabric: hyperfabric_bearer_token"
@@ -72,7 +72,7 @@ resource "hyperfabric_bearer_token" "full_example_bearer_token" {
   * `data_type` - (string) The type of data stored in the value of the annotation.
       - Default: `STRING`
       - Valid Values: `STRING`, `INT32`, `UINT32`, `INT64`, `UINT64`, `BOOL`, `TIME`, `UUID`, `DURATION`, `JSON`. -->
-<!-- 
+
 ### Read-Only ###
 
 * `id` - (string) The unique identifier (id) of the Bearer Token.
@@ -101,4 +101,4 @@ import {
   id = "{tokenId|name}"
   to = hyperfabric_bearer_token.example_bearer_token
 }
-``` -->
+```

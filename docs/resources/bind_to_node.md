@@ -1,13 +1,13 @@
 ---
 subcategory: "Blueprint"
 layout: "hyperfabric"
-page_title: "Nexus Hyperfabric: hyperfabric_bin_to_node"
-sidebar_current: "docs-hyperfabric-resource-hyperfabric_bin_to_node"
+page_title: "Nexus Hyperfabric: hyperfabric_bind_to_node"
+sidebar_current: "docs-hyperfabric-resource-hyperfabric_bind_to_node"
 description: |-
   Manages the binding of a Device to a Node in a Nexus Hyperfabric Fabric
 ---
 
-# hyperfabric_bin_to_node
+# hyperfabric_bind_to_node
 
 Manages the binding of a Device to a Node in a Nexus Hyperfabric Fabric
 
@@ -26,7 +26,7 @@ Manages the binding of a Device to a Node in a Nexus Hyperfabric Fabric
 The configuration snippet below binds a Device to a Node.
 
 ```hcl
-resource "hyperfabric_bin_to_node" "example_bin_to_node" {
+resource "hyperfabric_bind_to_node" "example_bind_to_node" {
   node_id = hyperfabric_node.example_node.id
   device_id = hyperfabric_device.example_device.id
 }
@@ -47,7 +47,7 @@ resource "hyperfabric_bin_to_node" "example_bin_to_node" {
 An existing bound Device to a Node can be [imported](https://www.terraform.io/docs/import/index.html) into this resource using the following command:
 
 ```bash
-terraform import hyperfabric_bin_to_node.example_bin_to_node {fabricId|fabricName}/nodes/{nodeId|nodeName}
+terraform import hyperfabric_bind_to_node.example_bind_to_node {fabricId|fabricName}/nodes/{nodeId|nodeName}
 ```
 
 Starting in Terraform version 1.5, an existing bound Device to a Node can be imported
@@ -56,6 +56,6 @@ using [import blocks](https://developer.hashicorp.com/terraform/language/import)
 ```hcl
 import {
   id = "{fabricId|fabricName}/nodes/{nodeId|nodeName}"
-  to = hyperfabric_bin_to_node.example_bin_to_node
+  to = hyperfabric_bind_to_node.example_bind_to_node
 }
 ```

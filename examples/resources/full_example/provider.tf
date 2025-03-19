@@ -11,6 +11,6 @@ provider "hyperfabric" {
   # retries = 2
   # label = "terraform"
   # proxy_url = "http://proxy.esl.cisco.com"
-	# proxy_creds = "username:password"
-	# auto_commit = false
+  # proxy_creds = "username:password"
+  # auto_commit = false
 }

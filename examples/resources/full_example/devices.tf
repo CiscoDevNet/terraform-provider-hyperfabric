@@ -1,4 +1,4 @@
-data hyperfabric_device "hyperfabric_device" {
+data "hyperfabric_device" "hyperfabric_device" {
   serial_number = "TFAB49304191"
 }
 

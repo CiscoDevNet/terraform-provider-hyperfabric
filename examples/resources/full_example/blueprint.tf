@@ -104,39 +104,39 @@ resource "hyperfabric_node_management_port" "node3" {
 
 resource "hyperfabric_node_port" "node3_eth1_10" {
   node_id = hyperfabric_node.node3.id
-	name = "Ethernet1_10"
-  roles = ["UNUSED_PORT"]
+  name    = "Ethernet1_10"
+  roles   = ["UNUSED_PORT"]
 }
 
 resource "hyperfabric_node_breakout" "node1_Ethernet1_1-2" {
-	node_id     = hyperfabric_node.node1.id
-	name        = "Ethernet1_1-2"
-	description = "Ports to be configured as Breakout"
-	ports       = ["Ethernet1_1", "Ethernet1_2"]
-	mode        = "4x25G(4)"
-	pluggable   = "QSFP-4SFP25G-CU1M"
-	labels      = [
-		"sj01-1-101-AAA01",
-		"blue"
-	]
-	annotations = [
-		{
-			name      = "color"
-			value     = "blue"
-		},
-		{
-			data_type = "UINT32"
-			name      = "rack"
-			value     = "1"
-		}
-	]
+  node_id     = hyperfabric_node.node1.id
+  name        = "Ethernet1_1-2"
+  description = "Ports to be configured as Breakout"
+  ports       = ["Ethernet1_1", "Ethernet1_2"]
+  mode        = "4x25G(4)"
+  pluggable   = "QSFP-4SFP25G-CU1M"
+  labels = [
+    "sj01-1-101-AAA01",
+    "blue"
+  ]
+  annotations = [
+    {
+      name  = "color"
+      value = "blue"
+    },
+    {
+      data_type = "UINT32"
+      name      = "rack"
+      value     = "1"
+    }
+  ]
 }
 
 resource "hyperfabric_node_breakout" "node1_Ethernet1_3" {
-	node_id     = hyperfabric_node.node1.id
-	name        = "Breakout of Ethernet1_3"
-	ports       = ["Ethernet1_3"]
-	mode        = "4x25G(4)"
+  node_id = hyperfabric_node.node1.id
+  name    = "Breakout of Ethernet1_3"
+  ports   = ["Ethernet1_3"]
+  mode    = "4x25G(4)"
 }
 
 data "hyperfabric_node_management_port" "node3" {
@@ -203,8 +203,8 @@ resource "hyperfabric_connection" "node1-node4" {
     node_id   = hyperfabric_node.node4.node_id
     port_name = "Ethernet1_1"
   }
-  description  = "Connection between node1 and node4"
-  pluggable    = "SFP-10G-AOC7M"
+  description = "Connection between node1 and node4"
+  pluggable   = "SFP-10G-AOC7M"
 }
 
 resource "hyperfabric_connection" "node2-node4" {
