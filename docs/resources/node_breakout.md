@@ -65,7 +65,7 @@ resource "hyperfabric_node_breakout" "full_example_node_breakout" {
 ## Schema ##
 
 ### Required ###
-* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source.
+* `node_id` - (string) The unique identifier (id) of a Node in a Fabric. Use the id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source.
 * `name` - (string) The name of the Breakout of the Node.
 * `mode` - (string) The mode used to Breakout the Ports.
 * `ports` - (list of strings) A list of Node Ports names to be broken down into Breakout Ports based on the Breakout `mode`.

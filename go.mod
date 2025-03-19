@@ -1,4 +1,4 @@
-module github.com/cisco-open/terraform-provider-hyperfabric
+module github.com/CiscoDevNet/terraform-provider-hyperfabric
 
 go 1.23.0
 

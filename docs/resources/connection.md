@@ -60,12 +60,12 @@ resource "hyperfabric_connection" "full_example_connection" {
 ## Schema ##
 
 ### Required ###
-* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/fabric) data source.
+* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/fabric) data source.
 * `local` - (map) A map that represents the local side of the Connection.
 
   #### Required ####
 
-  * `node_id` - (string) The Node unique identifier (node_id) of a Node used as local side of this Connection. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source.
+  * `node_id` - (string) The Node unique identifier (node_id) of a Node used as local side of this Connection. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source.
   * `port_name` - (string) The name of the Port on the Node used as local side of this Connection.
 
   #### Read-Only ####
@@ -75,7 +75,7 @@ resource "hyperfabric_connection" "full_example_connection" {
 
   #### Required ####
 
-  * `node_id` - (string) The Node unique identifier (node_id) of a Node used as remote side of this Connection. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/node) resource or the [hyperfabric_node](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/node) data source.
+  * `node_id` - (string) The Node unique identifier (node_id) of a Node used as remote side of this Connection. Use the node_id attribute of the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/node) resource or the [hyperfabric_node](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/node) data source.
   * `port_name` - (string) The name of the Port on the Node used as remote side of this Connection.
 
   #### Read-Only ####

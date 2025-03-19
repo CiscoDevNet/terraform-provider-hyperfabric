@@ -62,7 +62,7 @@ resource "hyperfabric_vrf" "full_example_vrf" {
 ## Schema ##
 
 ### Required ###
-* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/fabric) data source.
+* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/fabric) data source.
 * `name` - (string) The name of the VRF. The name should start with `Vrf`, `VRF`, `VRf` or `VrF`, followed by an optional `-` separator and end with an alpha-numeric string of 1 to 16 character.
 
 ### Optional ###

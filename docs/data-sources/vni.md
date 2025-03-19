@@ -35,7 +35,7 @@ data "hyperfabric_vni" "example_vni" {
 ## Schema ##
 
 ### Required ###
-* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/cisco-open/hyperfabric/latest/docs/data-sources/fabric) data source.
+* `fabric_id` - (string) The unique identifier (id) of the Fabric. Use the id attribute of the [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/resources/fabric) resource or [hyperfabric_fabric](https://registry.terraform.io/providers/CiscoDevNet/hyperfabric/latest/docs/data-sources/fabric) data source.
 * `name` - (string) The name of the VNI.
 
 ### Read-Only ###

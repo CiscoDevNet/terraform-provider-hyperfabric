@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cisco-open/terraform-provider-hyperfabric/internal/client"
+	"github.com/CiscoDevNet/terraform-provider-hyperfabric/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
