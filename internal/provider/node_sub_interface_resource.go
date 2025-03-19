@@ -44,20 +44,20 @@ type NodeSubInterfaceResource struct {
 
 // NodeSubInterfaceResourceModel describes the resource data model.
 type NodeSubInterfaceResourceModel struct {
-	Id             types.String  `tfsdk:"id"`
-	SubInterfaceId types.String  `tfsdk:"sub_interface_id"`
-	NodeId         types.String  `tfsdk:"node_id"`
-	Name           types.String  `tfsdk:"name"`
-	Description    types.String  `tfsdk:"description"`
-	Enabled        types.Bool    `tfsdk:"enabled"`
-	Ipv4Addresses  types.Set     `tfsdk:"ipv4_addresses"`
-	Ipv6Addresses  types.Set     `tfsdk:"ipv6_addresses"`
-	VlanId         types.Float64 `tfsdk:"vlan_id"`
-	VrfId          types.String  `tfsdk:"vrf_id"`
-	Parent         types.String  `tfsdk:"parent"`
-	Metadata       types.Object  `tfsdk:"metadata"`
-	Labels         types.Set     `tfsdk:"labels"`
-	Annotations    types.Set     `tfsdk:"annotations"`
+	Id             types.String                      `tfsdk:"id"`
+	SubInterfaceId types.String                      `tfsdk:"sub_interface_id"`
+	NodeId         types.String                      `tfsdk:"node_id"`
+	Name           types.String                      `tfsdk:"name"`
+	Description    types.String                      `tfsdk:"description"`
+	Enabled        types.Bool                        `tfsdk:"enabled"`
+	Ipv4Addresses  types.Set                         `tfsdk:"ipv4_addresses"`
+	Ipv6Addresses  types.Set                         `tfsdk:"ipv6_addresses"`
+	VlanId         types.Float64                     `tfsdk:"vlan_id"`
+	VrfId          customTypes.UuidFromIdStringValue `tfsdk:"vrf_id"`
+	Parent         types.String                      `tfsdk:"parent"`
+	Metadata       types.Object                      `tfsdk:"metadata"`
+	Labels         types.Set                         `tfsdk:"labels"`
+	Annotations    types.Set                         `tfsdk:"annotations"`
 }
 
 func getEmptyNodeSubInterfaceResourceModel() *NodeSubInterfaceResourceModel {
@@ -71,7 +71,7 @@ func getEmptyNodeSubInterfaceResourceModel() *NodeSubInterfaceResourceModel {
 		Ipv4Addresses:  basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		Ipv6Addresses:  basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		VlanId:         basetypes.NewFloat64Null(),
-		VrfId:          basetypes.NewStringNull(),
+		VrfId:          customTypes.NewUuidFromIdStringNull(),
 		Parent:         basetypes.NewStringNull(),
 		Metadata:       basetypes.NewObjectNull(MetadataResourceModelAttributeType()),
 		Labels:         basetypes.NewSetNull(SetStringResourceModelAttributeType()),
@@ -217,12 +217,14 @@ func (r *NodeSubInterfaceResource) Schema(ctx context.Context, req resource.Sche
 				},
 			},
 			"vrf_id": schema.StringAttribute{
+				CustomType:          customTypes.UuidFromIdStringType{},
 				MarkdownDescription: "The `vrf_id` of a VRF to associate with the Sub-Interface of the Node.",
 				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					SetToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate(),
+					CompareUuidWithIdForEquality(),
 				},
 			},
 			"parent": schema.StringAttribute{
@@ -470,7 +472,7 @@ func getAndSetNodeSubInterfaceAttributes(ctx context.Context, diags *diag.Diagno
 			} else if attributeName == "vlanId" {
 				newNodeSubInterface.VlanId = basetypes.NewFloat64Value(attributeValue.(float64))
 			} else if attributeName == "vrfId" {
-				newNodeSubInterface.VrfId = basetypes.NewStringValue(attributeValue.(string))
+				newNodeSubInterface.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
 			} else if attributeName == "parent" {
 				newNodeSubInterface.Parent = basetypes.NewStringValue(attributeValue.(string))
 			} else if attributeName == "metadata" {

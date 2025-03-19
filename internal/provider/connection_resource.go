@@ -142,9 +142,9 @@ func getNewConnectionResourceModelFromData(data *ConnectionResourceModel) *Conne
 }
 
 type LocalRemoteConnectionResourceModel struct {
-	NodeId   types.String `tfsdk:"node_id"`
-	NodeName types.String `tfsdk:"node_name"`
-	PortName types.String `tfsdk:"port_name"`
+	NodeId   customTypes.UuidFromIdStringValue `tfsdk:"node_id"`
+	NodeName types.String                      `tfsdk:"node_name"`
+	PortName types.String                      `tfsdk:"port_name"`
 }
 
 func LocalRemoteConnectionResourceModelAttributeType() map[string]attr.Type {
@@ -157,7 +157,7 @@ func LocalRemoteConnectionResourceModelAttributeType() map[string]attr.Type {
 
 func getEmptyLocalRemoteConnectionResourceModel() LocalRemoteConnectionResourceModel {
 	return LocalRemoteConnectionResourceModel{
-		NodeId:   basetypes.NewStringNull(),
+		NodeId:   customTypes.NewUuidFromIdStringNull(),
 		NodeName: basetypes.NewStringNull(),
 		PortName: basetypes.NewStringNull(),
 	}
@@ -172,9 +172,11 @@ func getLocalRemoteConnectionSchemaAttribute() schema.SingleNestedAttribute {
 		},
 		Attributes: map[string]schema.Attribute{
 			"node_id": schema.StringAttribute{
-				Required: true,
+				CustomType: customTypes.UuidFromIdStringType{},
+				Required:   true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+					CompareUuidWithIdForEquality(),
 				},
 				MarkdownDescription: `The ID of the Node used as as local/remote side of this Connection.`,
 			},
@@ -202,7 +204,7 @@ func NewLocalRemoteConnectionResourceModel(data map[string]interface{}) LocalRem
 		if attributeName == "nodeId" && attributeValue != nil {
 			stringAttr := attributeValue.(string)
 			if stringAttr != "" {
-				localRemoteConnection.NodeId = basetypes.NewStringValue(stringAttr)
+				localRemoteConnection.NodeId = customTypes.NewUuidFromIdStringValue(stringAttr)
 			}
 		} else if attributeName == "nodeName" && attributeValue != nil {
 			stringAttr := attributeValue.(string)
