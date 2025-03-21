@@ -43,3 +43,6 @@ website/vendor
 
 # Build file
 terraform-provider-hyperfabric
+
+# Test coverage file
+**/coverage.out
