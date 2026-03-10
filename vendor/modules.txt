@@ -234,8 +234,8 @@ github.com/hashicorp/terraform-plugin-framework-validators/int32validator
 github.com/hashicorp/terraform-plugin-framework-validators/internal/schemavalidator
 github.com/hashicorp/terraform-plugin-framework-validators/setvalidator
 github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator
-# github.com/hashicorp/terraform-plugin-go v0.29.0
-## explicit; go 1.24.0
+# github.com/hashicorp/terraform-plugin-go v0.31.0
+## explicit; go 1.25.0
 github.com/hashicorp/terraform-plugin-go/internal/logging
 github.com/hashicorp/terraform-plugin-go/tfprotov5
 github.com/hashicorp/terraform-plugin-go/tfprotov5/internal/diag
@@ -497,10 +497,10 @@ google.golang.org/appengine/internal/datastore
 google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/modules
 google.golang.org/appengine/internal/remote_api
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
 ## explicit; go 1.24.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.76.0
+# google.golang.org/grpc v1.79.2
 ## explicit; go 1.24.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -511,7 +511,6 @@ google.golang.org/grpc/balancer/endpointsharding
 google.golang.org/grpc/balancer/grpclb/state
 google.golang.org/grpc/balancer/pickfirst
 google.golang.org/grpc/balancer/pickfirst/internal
-google.golang.org/grpc/balancer/pickfirst/pickfirstleaf
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/channelz
@@ -520,6 +519,7 @@ google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
 google.golang.org/grpc/credentials/insecure
 google.golang.org/grpc/encoding
+google.golang.org/grpc/encoding/internal
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/experimental/stats
 google.golang.org/grpc/grpclog
@@ -529,6 +529,7 @@ google.golang.org/grpc/health/grpc_health_v1
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
 google.golang.org/grpc/internal/balancer/gracefulswitch
+google.golang.org/grpc/internal/balancer/weight
 google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/buffer
@@ -568,7 +569,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/protobuf v1.36.10
+# google.golang.org/protobuf v1.36.11
 ## explicit; go 1.23
 google.golang.org/protobuf/encoding/protojson
 google.golang.org/protobuf/encoding/prototext
