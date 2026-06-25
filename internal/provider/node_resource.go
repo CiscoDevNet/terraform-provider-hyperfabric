@@ -55,6 +55,7 @@ type NodeResourceModel struct {
 	ModelName    types.String `tfsdk:"model_name"`
 	SerialNumber types.String `tfsdk:"serial_number"`
 	DeviceId     types.String `tfsdk:"device_id"`
+	HwSetId      types.String `tfsdk:"hardware_set_id"`
 	Position     types.String `tfsdk:"position"`
 	Roles        types.Set    `tfsdk:"roles"`
 	Metadata     types.Object `tfsdk:"metadata"`
@@ -74,6 +75,7 @@ func getEmptyNodeResourceModel() *NodeResourceModel {
 		ModelName:    basetypes.NewStringNull(),
 		SerialNumber: basetypes.NewStringNull(),
 		DeviceId:     basetypes.NewStringNull(),
+		HwSetId:      basetypes.NewStringNull(),
 		Position:     basetypes.NewStringNull(),
 		Roles:        basetypes.NewSetNull(SetStringResourceModelAttributeType()),
 		Metadata:     basetypes.NewObjectNull(MetadataResourceModelAttributeType()),
@@ -123,6 +125,10 @@ func getNewNodeResourceModelFromData(data *NodeResourceModel) *NodeResourceModel
 
 	if !data.DeviceId.IsNull() && !data.DeviceId.IsUnknown() {
 		newNode.DeviceId = data.DeviceId
+	}
+
+	if !data.HwSetId.IsNull() && !data.HwSetId.IsUnknown() {
+		newNode.HwSetId = data.HwSetId
 	}
 
 	if !data.Position.IsNull() && !data.Position.IsUnknown() {
@@ -230,6 +236,13 @@ func (r *NodeResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			},
 			"device_id": schema.StringAttribute{
 				MarkdownDescription: "`device_id` defines the unique identifier of the device associated with the Node.",
+				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"hardware_set_id": schema.StringAttribute{
+				MarkdownDescription: "`hardware_set_id` defines the unique identifier of the hardware set associated with the Node.",
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -467,6 +480,8 @@ func getAndSetNodeAttributes(ctx context.Context, diags *diag.Diagnostics, clien
 				newNode.DeviceId = basetypes.NewStringValue(attributeValue.(string))
 				// } else if attributeName == "position" {
 				// 	newNode.Position = basetypes.NewStringValue(attributeValue.(string))
+			} else if attributeName == "hwSetId" {
+				newNode.HwSetId = basetypes.NewStringValue(attributeValue.(string))
 			} else if attributeName == "roles" {
 				newNode.Roles = NewSetString(ctx, attributeValue.([]interface{}))
 			} else if attributeName == "metadata" {
@@ -512,9 +527,13 @@ func getNodeJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *Node
 	if !data.SerialNumber.IsNull() && !data.SerialNumber.IsUnknown() {
 		payloadMap["serialNumber"] = data.SerialNumber.ValueString()
 	}
+	// REMOVE DeviceId from payload on PUT requests
+	// if !data.DeviceId.IsNull() && !data.DeviceId.IsUnknown() {
+	// 	payloadMap["deviceId"] = data.DeviceId.ValueString()
+	// }
 
-	if !data.DeviceId.IsNull() && !data.DeviceId.IsUnknown() {
-		payloadMap["deviceId"] = data.DeviceId.ValueString()
+	if !data.HwSetId.IsNull() && !data.HwSetId.IsUnknown() {
+		payloadMap["hwSetId"] = data.HwSetId.ValueString()
 	}
 
 	if !data.Roles.IsNull() && !data.Roles.IsUnknown() {
