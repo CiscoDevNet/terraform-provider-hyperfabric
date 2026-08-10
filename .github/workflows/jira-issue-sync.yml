@@ -3,14 +3,19 @@ name: Sync GitHub Issues & Pull Requests to Jira
 on: [issues, issue_comment, pull_request]
 concurrency: jira_issues
 
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
 jobs:
   sync_issues_to_jira:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Sync GitHub Issues & Pull Requests to Jira
-        uses: ciscoecosystem/sync-jira-actions@v1.1
+        uses: ciscoecosystem/sync-jira-actions@40f433770e130cbab8a854e1572a8cdbefdb1f88 # v1.4.5
         with:
           sync_label: jira-sync
           status_field_id: 10740

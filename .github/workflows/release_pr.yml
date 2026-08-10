@@ -3,19 +3,23 @@ name: release_pr
 on:
   push:
     branches:
-      - master
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   release-pr:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Unshallow
-        run: git fetch --prune --unshallow
-      
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
       # git-cliff generates CHANGELOG.md
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.10'
       - run: pip install git-cliff typos
@@ -26,33 +30,35 @@ jobs:
           case $changelog in
               *"BREAKING CHANGES:"* )
                   echo "MAJOR"
-                  echo "bump="MAJOR: version change"" >> $GITHUB_OUTPUT
+                  echo "bump=MAJOR: version change" >> "$GITHUB_OUTPUT"
                   ;;
               *"IMPROVEMENTS:"* )
                   echo "MINOR"
-                  echo "bump="MINOR: version change"" >> $GITHUB_OUTPUT
+                  echo "bump=MINOR: version change" >> "$GITHUB_OUTPUT"
                   ;;
               *"DEPRECATIONS:"* )
                   echo "MINOR"
-                  echo "bump="MINOR: version change"" >> $GITHUB_OUTPUT
+                  echo "bump=MINOR: version change" >> "$GITHUB_OUTPUT"
                   ;;
               * )
                   echo "PATCH"
-                  echo "bump="PATCH: version change"" >> $GITHUB_OUTPUT
+                  echo "bump=PATCH: version change" >> "$GITHUB_OUTPUT"
                   ;;
           esac
       # The --with-commit inserts a commit message to git-cliff without it being in the history.
       # It is used here to dynamically add version bump commands.
       - name: Get next version
         id: vars
-        run: echo "version=$(git cliff --bumped-version --with-commit "${{ steps.type.outputs.bump }}")" >> $GITHUB_OUTPUT
+        run: |
+          version=$(git cliff --bumped-version --with-commit "${{ steps.type.outputs.bump }}")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Generate changelog output
         run: git cliff --bump --unreleased --with-commit "${{ steps.type.outputs.bump }}"
       - name: Prepend new changelog entry
         run: git cliff --bump --unreleased -p CHANGELOG.md --with-commit "${{ steps.type.outputs.bump }}"
 
       # Generate annotation_unsupported.go
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: 'go.mod'
       - name: Generate annotation unsupported provider code
@@ -69,7 +75,7 @@ jobs:
         run: git checkout -b release_pr && git push --set-upstream origin release_pr --force && git clean -f -d
 
       # Create or update release PR
-      - run: gh pr create --base master --head release_pr --title "Pre-Release PR (${{ steps.vars.outputs.version }})" --body ""
+      - run: gh pr create --base main --head release_pr --title "Pre-Release PR (${{ steps.vars.outputs.version }})" --body ""
         id: pr
         continue-on-error: true
         env:
