@@ -75,6 +75,7 @@ func (p *HyperfabricProvider) Schema(ctx context.Context, req provider.SchemaReq
 			"proxy_creds": schema.StringAttribute{
 				MarkdownDescription: "Proxy server credentials in the form of username:password. This can also be set as the HYPERFABRIC_PROXY_CREDS environment variable.",
 				Optional:            true,
+				Sensitive:           true,
 			},
 			"retries": schema.Int32Attribute{
 				MarkdownDescription: "Number of retries for REST API calls. This can also be set as the HYPERFABRIC_RETRIES environment variable. Defaults to `2`.",

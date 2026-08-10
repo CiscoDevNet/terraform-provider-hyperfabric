@@ -408,6 +408,7 @@ func (r *NodeManagementPortResource) Schema(ctx context.Context, req resource.Sc
 				MarkdownDescription: "A password to be used to authenticate to the proxy.",
 				Optional:            true,
 				Computed:            true,
+				Sensitive:           true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					SetToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate(),

@@ -105,6 +105,7 @@ func (d *NodeManagementPortDataSource) Schema(ctx context.Context, req datasourc
 			"proxy_password": schema.StringAttribute{
 				MarkdownDescription: "A password to be used to authenticate to the proxy.",
 				Computed:            true,
+				Sensitive:           true,
 			},
 			"proxy_credential_id": schema.StringAttribute{
 				MarkdownDescription: "`proxy_credential_id` defines the unique identifier of a set of credentials for the proxy.",
