@@ -1,3 +1,25 @@
+# Terraform Provider Cisco Nexus Hyperfabric - Changelog
+
+All notable changes to this project will be documented in this file.
+
+## 0.1.0 (August 28, 2026)
+
+IMPROVEMENTS:
+- Add resources and data-sources for hyperfabric_fabric, hyperfabric_node, hyperfabric_node_port, hyperfabric_node_management_port, hyperfabric_device, hyperfabric_connection, hyperfabric_bind_to_node, hyperfabric_user, hyperfabric_vni, hyperfabric_vrf
+- Add resources and data-sources for hyperfabric_node_loopback
+- Add topology attribute back to hyperfabric_fabric
+- Add resources and data-sources for hyperfabric_node_sub_interface
+- Add resources and data-sources for hyperfabric_node_breakout
+- Add hyperfabric_bearer_token resource and datasource, fix documentation typo and format example
+
+BUG FIXES:
+- Fix a series of bug across hyperfabric_bearer_token, hyperfabric_node_port and hyperfabric_node_management_port
+- Fix a series of bug across hyperfabric_bearer_token, hyperfabric_node_port, hyperfabric_node, hyperfabric_connection, hyperfabric_user, hyperfabric_vrf and hyperfabric_vni
+- Add support to ignore 404 when deleting
+- Extract uuid from full id when provided and a specific resource uuid is expected
+- Fix hyperfabric_node_port issue on destroy when roles set to fabric_port and fix test to ignore vrf_id bug issue for now
+- Make credentials and tokens sensitive attributes and add regression check for it.
+
 <!--
 ## 1.0.0 (Unreleased)
 BREAKING CHANGE:
