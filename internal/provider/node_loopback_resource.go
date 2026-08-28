@@ -266,24 +266,27 @@ func (r *NodeLoopbackResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/loopbacks", data.NodeId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/loopbacks", data.NodeId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	loopbackContainer, err := container.ArrayElement(0, "loopbacks")
-	if err != nil {
+	var response nodeLoopbacksAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node loopback create") {
+		return
+	}
+	createdLoopback, ok := requireFirstAPIObject(&resp.Diagnostics, response.Loopbacks, "created node loopback")
+	if !ok {
+		return
+	}
+	loopbackID, ok := requireAPIIdentifier(&resp.Diagnostics, createdLoopback.Id, "created node loopback")
+	if !ok {
 		return
 	}
 
-	loopbackId := StripQuotes(loopbackContainer.Search("id").String())
-	if loopbackId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", data.NodeId.ValueString(), loopbackId))
-		data.LoopbackId = basetypes.NewStringValue(loopbackId)
-		getAndSetNodeLoopbackAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", data.NodeId.ValueString(), loopbackID))
+	data.LoopbackId = basetypes.NewStringValue(loopbackID)
+	getAndSetNodeLoopbackAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -303,15 +306,16 @@ func (r *NodeLoopbackResource) Read(ctx context.Context, req resource.ReadReques
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node_loopback with id '%s'", data.Id.ValueString()))
 	checkAndSetNodeLoopbackIds(data)
-	getAndSetNodeLoopbackAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodeLoopbackResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodeLoopbackAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node_loopback with id '%s'", data.Id.ValueString()))
 }
 
@@ -378,10 +382,10 @@ func (r *NodeLoopbackResource) ImportState(ctx context.Context, req resource.Imp
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node_loopback")
 }
 
-func getAndSetNodeLoopbackAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeLoopbackResourceModel) {
+func getAndSetNodeLoopbackAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeLoopbackResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/loopbacks/%s", data.NodeId.ValueString(), data.LoopbackId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNodeLoopback := *getNewNodeLoopbackResourceModelFromData(data)
@@ -389,41 +393,55 @@ func getAndSetNodeLoopbackAttributes(ctx context.Context, diags *diag.Diagnostic
 	node.Id = newNodeLoopback.NodeId
 	checkAndSetNodeIds(node)
 
-	if requestData.Data() != nil {
-		for attributeName, attributeValue := range requestData.Data().(map[string]interface{}) {
-			if attributeName == "id" && (data.LoopbackId.IsNull() || data.LoopbackId.IsUnknown() || data.LoopbackId.ValueString() == "" || data.LoopbackId.ValueString() != attributeValue.(string)) {
-				newNodeLoopback.LoopbackId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeLoopback.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodeLoopback.NodeId.ValueString(), newNodeLoopback.LoopbackId.ValueString()))
-			} else if attributeName == "fabricId" && (node.FabricId.IsNull() || node.FabricId.IsUnknown() || node.FabricId.ValueString() == "" || node.FabricId.ValueString() != attributeValue.(string)) {
-				node.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeLoopback.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeLoopback.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodeLoopback.NodeId.ValueString(), newNodeLoopback.LoopbackId.ValueString()))
-			} else if attributeName == "nodeId" && (node.NodeId.IsNull() || node.NodeId.IsUnknown() || node.NodeId.ValueString() == "" || node.NodeId.ValueString() != attributeValue.(string)) {
-				node.NodeId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeLoopback.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeLoopback.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodeLoopback.NodeId.ValueString(), newNodeLoopback.LoopbackId.ValueString()))
-			} else if attributeName == "name" {
-				newNodeLoopback.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newNodeLoopback.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "ipv4Address" {
-				newNodeLoopback.Ipv4Address = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "ipv6Address" {
-				newNodeLoopback.Ipv6Address = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "vrfId" {
-				newNodeLoopback.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newNodeLoopback.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newNodeLoopback.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newNodeLoopback.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNodeLoopback.Id = basetypes.NewStringNull()
+		*data = newNodeLoopback
+		return false
+	}
+
+	var response nodeLoopbackAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node loopback") {
+		return true
+	}
+	loopbackID, ok := requireAPIIdentifier(diags, response.Id, "node loopback")
+	if !ok {
+		return true
+	}
+	newNodeLoopback.LoopbackId = basetypes.NewStringValue(loopbackID)
+	if response.FabricId != nil {
+		node.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	if response.NodeId != nil {
+		node.NodeId = basetypes.NewStringValue(*response.NodeId)
+	}
+	newNodeLoopback.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
+	newNodeLoopback.Id = basetypes.NewStringValue(fmt.Sprintf("%s/loopbacks/%s", newNodeLoopback.NodeId.ValueString(), newNodeLoopback.LoopbackId.ValueString()))
+	if response.Name != nil {
+		newNodeLoopback.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newNodeLoopback.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.IPv4Address != nil {
+		newNodeLoopback.Ipv4Address = basetypes.NewStringValue(*response.IPv4Address)
+	}
+	if response.IPv6Address != nil {
+		newNodeLoopback.Ipv6Address = basetypes.NewStringValue(*response.IPv6Address)
+	}
+	if response.VrfID != nil {
+		newNodeLoopback.VrfId = customTypes.NewUuidFromIdStringValue(*response.VrfID)
+	}
+	if response.Metadata != nil {
+		newNodeLoopback.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newNodeLoopback.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newNodeLoopback.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newNodeLoopback
+	return true
 }
 
 func getNodeLoopbackJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodeLoopbackResourceModel, action string) *gabs.Container {

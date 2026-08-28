@@ -323,24 +323,27 @@ func (r *NodeSubInterfaceResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/subInterfaces", data.NodeId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/subInterfaces", data.NodeId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	subInterfaceContainer, err := container.ArrayElement(0, "subInterfaces")
-	if err != nil {
+	var response nodeSubInterfacesAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node sub-interface create") {
+		return
+	}
+	createdSubInterface, ok := requireFirstAPIObject(&resp.Diagnostics, response.SubInterfaces, "created node sub-interface")
+	if !ok {
+		return
+	}
+	subInterfaceID, ok := requireAPIIdentifier(&resp.Diagnostics, createdSubInterface.Id, "created node sub-interface")
+	if !ok {
 		return
 	}
 
-	subInterfaceId := StripQuotes(subInterfaceContainer.Search("id").String())
-	if subInterfaceId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", data.NodeId.ValueString(), subInterfaceId))
-		data.SubInterfaceId = basetypes.NewStringValue(subInterfaceId)
-		getAndSetNodeSubInterfaceAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", data.NodeId.ValueString(), subInterfaceID))
+	data.SubInterfaceId = basetypes.NewStringValue(subInterfaceID)
+	getAndSetNodeSubInterfaceAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -360,15 +363,16 @@ func (r *NodeSubInterfaceResource) Read(ctx context.Context, req resource.ReadRe
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node_sub_interface with id '%s'", data.Id.ValueString()))
 	checkAndSetNodeSubInterfaceIds(data)
-	getAndSetNodeSubInterfaceAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodeSubInterfaceResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodeSubInterfaceAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node_sub_interface with id '%s'", data.Id.ValueString()))
 }
 
@@ -435,10 +439,10 @@ func (r *NodeSubInterfaceResource) ImportState(ctx context.Context, req resource
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node_sub_interface")
 }
 
-func getAndSetNodeSubInterfaceAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeSubInterfaceResourceModel) {
+func getAndSetNodeSubInterfaceAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeSubInterfaceResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/subInterfaces/%s", data.NodeId.ValueString(), data.SubInterfaceId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNodeSubInterface := *getNewNodeSubInterfaceResourceModelFromData(data)
@@ -446,47 +450,64 @@ func getAndSetNodeSubInterfaceAttributes(ctx context.Context, diags *diag.Diagno
 	node.Id = newNodeSubInterface.NodeId
 	checkAndSetNodeIds(node)
 
-	if requestData.Data() != nil {
-		for attributeName, attributeValue := range requestData.Data().(map[string]interface{}) {
-			if attributeName == "id" && (data.SubInterfaceId.IsNull() || data.SubInterfaceId.IsUnknown() || data.SubInterfaceId.ValueString() == "" || data.SubInterfaceId.ValueString() != attributeValue.(string)) {
-				newNodeSubInterface.SubInterfaceId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeSubInterface.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", newNodeSubInterface.NodeId.ValueString(), newNodeSubInterface.SubInterfaceId.ValueString()))
-			} else if attributeName == "fabricId" && (node.FabricId.IsNull() || node.FabricId.IsUnknown() || node.FabricId.ValueString() == "" || node.FabricId.ValueString() != attributeValue.(string)) {
-				node.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeSubInterface.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeSubInterface.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", newNodeSubInterface.NodeId.ValueString(), newNodeSubInterface.SubInterfaceId.ValueString()))
-			} else if attributeName == "nodeId" && (node.NodeId.IsNull() || node.NodeId.IsUnknown() || node.NodeId.ValueString() == "" || node.NodeId.ValueString() != attributeValue.(string)) {
-				node.NodeId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeSubInterface.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeSubInterface.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", newNodeSubInterface.NodeId.ValueString(), newNodeSubInterface.SubInterfaceId.ValueString()))
-			} else if attributeName == "name" {
-				newNodeSubInterface.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newNodeSubInterface.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newNodeSubInterface.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "ipv4Addresses" {
-				newNodeSubInterface.Ipv4Addresses = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "ipv6Addresses" {
-				newNodeSubInterface.Ipv6Addresses = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "vlanId" {
-				newNodeSubInterface.VlanId = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "vrfId" {
-				newNodeSubInterface.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
-			} else if attributeName == "parent" {
-				newNodeSubInterface.Parent = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newNodeSubInterface.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newNodeSubInterface.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newNodeSubInterface.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNodeSubInterface.Id = basetypes.NewStringNull()
+		*data = newNodeSubInterface
+		return false
+	}
+
+	var response nodeSubInterfaceAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node sub-interface") {
+		return true
+	}
+	subInterfaceID, ok := requireAPIIdentifier(diags, response.Id, "node sub-interface")
+	if !ok {
+		return true
+	}
+	newNodeSubInterface.SubInterfaceId = basetypes.NewStringValue(subInterfaceID)
+	if response.FabricId != nil {
+		node.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	if response.NodeId != nil {
+		node.NodeId = basetypes.NewStringValue(*response.NodeId)
+	}
+	newNodeSubInterface.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
+	newNodeSubInterface.Id = basetypes.NewStringValue(fmt.Sprintf("%s/subInterfaces/%s", newNodeSubInterface.NodeId.ValueString(), newNodeSubInterface.SubInterfaceId.ValueString()))
+	if response.Name != nil {
+		newNodeSubInterface.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newNodeSubInterface.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newNodeSubInterface.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.IPv4Addresses != nil {
+		newNodeSubInterface.Ipv4Addresses = NewSetString(ctx, response.IPv4Addresses)
+	}
+	if response.IPv6Addresses != nil {
+		newNodeSubInterface.Ipv6Addresses = NewSetString(ctx, response.IPv6Addresses)
+	}
+	if response.VlanId != nil {
+		newNodeSubInterface.VlanId = basetypes.NewFloat64Value(*response.VlanId)
+	}
+	if response.VrfID != nil {
+		newNodeSubInterface.VrfId = customTypes.NewUuidFromIdStringValue(*response.VrfID)
+	}
+	if response.Parent != nil {
+		newNodeSubInterface.Parent = basetypes.NewStringValue(*response.Parent)
+	}
+	if response.Metadata != nil {
+		newNodeSubInterface.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newNodeSubInterface.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newNodeSubInterface.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newNodeSubInterface
+	return true
 }
 
 func getNodeSubInterfaceJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodeSubInterfaceResourceModel, action string) *gabs.Container {

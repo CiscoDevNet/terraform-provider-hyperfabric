@@ -177,39 +177,52 @@ func getAndSetDeviceAttributes(ctx context.Context, diags *diag.Diagnostics, cli
 		return
 	}
 
-	if requestData.Data() != nil {
-		responseMap := requestData.Data().(map[string]interface{})
-		for responseKey, responseValue := range responseMap {
-			if responseKey == "devices" {
-				devices := responseValue.([]interface{})
-				for _, device := range devices {
-					newDevice := *getEmptyDeviceDataSourceModel()
-					for attributeName, attributeValue := range device.(map[string]interface{}) {
-						if attributeName == "deviceId" {
-							newDevice.Id = basetypes.NewStringValue(attributeValue.(string))
-							newDevice.DeviceId = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "fabricId" {
-							newDevice.FabricId = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "modelName" {
-							newDevice.ModelName = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "nodeId" {
-							newDevice.NodeId = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "osType" {
-							newDevice.OsType = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "rackId" {
-							newDevice.RackId = basetypes.NewStringValue(attributeValue.(string))
-						} else if attributeName == "roles" {
-							newDevice.Roles = NewSetString(ctx, attributeValue.([]interface{}))
-						} else if attributeName == "serialNumber" {
-							newDevice.SerialNumber = basetypes.NewStringValue(attributeValue.(string))
-						}
-					}
-					if (!data.SerialNumber.IsNull() && !data.SerialNumber.IsUnknown() && data.SerialNumber.ValueString() != "" && newDevice.SerialNumber == data.SerialNumber) ||
-						(!data.DeviceId.IsNull() && !data.DeviceId.IsUnknown() && data.DeviceId.ValueString() != "" && newDevice.DeviceId == data.DeviceId) {
-						*data = newDevice
-					}
-				}
-			}
-		}
+	if requestData == nil || !requestData.Found {
+		data.Id = basetypes.NewStringNull()
+		return
 	}
+
+	var response devicesAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "devices") {
+		return
+	}
+
+	for _, device := range response.Devices {
+		matchesSerial := device.SerialNumber != nil && !data.SerialNumber.IsNull() && !data.SerialNumber.IsUnknown() && *device.SerialNumber == data.SerialNumber.ValueString()
+		matchesID := device.DeviceId != nil && !data.DeviceId.IsNull() && !data.DeviceId.IsUnknown() && *device.DeviceId == data.DeviceId.ValueString()
+		if !matchesSerial && !matchesID {
+			continue
+		}
+
+		newDevice := *getEmptyDeviceDataSourceModel()
+		if device.DeviceId != nil {
+			newDevice.Id = basetypes.NewStringValue(*device.DeviceId)
+			newDevice.DeviceId = basetypes.NewStringValue(*device.DeviceId)
+		}
+		if device.FabricId != nil {
+			newDevice.FabricId = basetypes.NewStringValue(*device.FabricId)
+		}
+		if device.ModelName != nil {
+			newDevice.ModelName = basetypes.NewStringValue(*device.ModelName)
+		}
+		if device.NodeId != nil {
+			newDevice.NodeId = basetypes.NewStringValue(*device.NodeId)
+		}
+		if device.OSType != nil {
+			newDevice.OsType = basetypes.NewStringValue(*device.OSType)
+		}
+		if device.RackId != nil {
+			newDevice.RackId = basetypes.NewStringValue(*device.RackId)
+		}
+		if device.Roles != nil {
+			newDevice.Roles = NewSetString(ctx, device.Roles)
+		}
+		if device.SerialNumber != nil {
+			newDevice.SerialNumber = basetypes.NewStringValue(*device.SerialNumber)
+		}
+		*data = newDevice
+		return
+	}
+
+	data.Id = basetypes.NewStringNull()
 }

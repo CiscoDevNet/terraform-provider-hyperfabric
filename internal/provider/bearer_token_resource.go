@@ -255,28 +255,30 @@ func (r *BearerTokenResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/bearerTokens", "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/bearerTokens", "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	bearerTokensContainer, err := container.ArrayElement(0, "tokens")
-	if err != nil {
+	var response bearerTokensAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "bearer token create") {
+		return
+	}
+	createdBearerToken, ok := requireFirstAPIObject(&resp.Diagnostics, response.Tokens, "created bearer token")
+	if !ok {
+		return
+	}
+	tokenID, ok := requireAPIIdentifier(&resp.Diagnostics, createdBearerToken.TokenId, "created bearer token")
+	if !ok {
 		return
 	}
 
-	bearertokenId := StripQuotes(bearerTokensContainer.Search("tokenId").String())
-	if bearertokenId != "" {
-		data.Id = basetypes.NewStringValue(bearertokenId)
-		data.TokenId = basetypes.NewStringValue(bearertokenId)
-		token := StripQuotes(container.Search("token").String())
-		if token != "" {
-			data.Token = basetypes.NewStringValue(token)
-		}
-		getAndSetBearerTokenAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
+	data.Id = basetypes.NewStringValue(tokenID)
+	data.TokenId = basetypes.NewStringValue(tokenID)
+	if response.Token != nil {
+		data.Token = basetypes.NewStringValue(*response.Token)
 	}
+	getAndSetBearerTokenAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -296,15 +298,16 @@ func (r *BearerTokenResource) Read(ctx context.Context, req resource.ReadRequest
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_bearer_token with id '%s'", data.Id.ValueString()))
 
-	getAndSetBearerTokenAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *BearerTokenResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetBearerTokenAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_bearer_token with id '%s'", data.Id.ValueString()))
 }
@@ -371,54 +374,62 @@ func (r *BearerTokenResource) ImportState(ctx context.Context, req resource.Impo
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_bearer_token")
 }
 
-func getAndSetBearerTokenAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *BearerTokenResourceModel) {
+func getAndSetBearerTokenAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *BearerTokenResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/bearerTokens/%s", data.Id.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newBearerToken := *getNewBearerTokenResourceModelFromData(data)
-	// newBearerToken.Id = data.Id
-	// newBearerToken.Name = data.Name
-	// newBearerToken.Token = data.Token
-	// newBearerToken.TokenId = data.TokenId
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "tokenId" && (data.Id.IsNull() || data.Id.IsUnknown() || data.Id.ValueString() == "" || data.Id.ValueString() != attributeValue.(string)) {
-				newBearerToken.Id = basetypes.NewStringValue(attributeValue.(string))
-				newBearerToken.TokenId = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "name" {
-				newBearerToken.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newBearerToken.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "notAfter" {
-				timeValue, err := timetypes.NewRFC3339Value(attributeValue.(string))
-				if err == nil {
-					newBearerToken.NotAfter = timeValue
-				}
-			} else if attributeName == "notBefore" {
-				timeValue, err := timetypes.NewRFC3339Value(attributeValue.(string))
-				if err == nil {
-					newBearerToken.NotBefore = timeValue
-				}
-			} else if attributeName == "scope" {
-				newBearerToken.Scope = basetypes.NewStringValue(strings.Split(attributeValue.(string), "TOKEN_SCOPE_")[1])
-			} else if attributeName == "token" {
-				newBearerToken.Token = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newBearerToken.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-				// } else if attributeName == "labels" {
-				// 	newBearerToken.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-				// } else if attributeName == "annotations" {
-				// 	newBearerToken.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newBearerToken.Id = basetypes.NewStringNull()
+		*data = newBearerToken
+		return false
+	}
+
+	var response bearerTokenAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "bearer token") {
+		return true
+	}
+	tokenID, ok := requireAPIIdentifier(diags, response.TokenId, "bearer token")
+	if !ok {
+		return true
+	}
+	newBearerToken.Id = basetypes.NewStringValue(tokenID)
+	newBearerToken.TokenId = basetypes.NewStringValue(tokenID)
+	if response.Name != nil {
+		newBearerToken.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newBearerToken.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.NotAfter != nil {
+		timeValue, err := timetypes.NewRFC3339Value(*response.NotAfter)
+		if err != nil {
+			diags.AddError("Failed to decode bearer token response", fmt.Sprintf("The Hyperfabric API returned an invalid notAfter value: %s", err))
+		} else {
+			newBearerToken.NotAfter = timeValue
+		}
+	}
+	if response.NotBefore != nil {
+		timeValue, err := timetypes.NewRFC3339Value(*response.NotBefore)
+		if err != nil {
+			diags.AddError("Failed to decode bearer token response", fmt.Sprintf("The Hyperfabric API returned an invalid notBefore value: %s", err))
+		} else {
+			newBearerToken.NotBefore = timeValue
+		}
+	}
+	if response.Scope != nil {
+		newBearerToken.Scope = basetypes.NewStringValue(strings.TrimPrefix(*response.Scope, "TOKEN_SCOPE_"))
+	}
+	if response.Token != nil {
+		newBearerToken.Token = basetypes.NewStringValue(*response.Token)
+	}
+	if response.Metadata != nil {
+		newBearerToken.Metadata = NewMetadataObject(ctx, response.Metadata)
 	}
 	*data = newBearerToken
+	return true
 }
 
 func getBearerTokenJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *BearerTokenResourceModel, action string) *gabs.Container {

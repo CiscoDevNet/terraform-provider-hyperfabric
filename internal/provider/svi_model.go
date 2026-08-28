@@ -129,17 +129,16 @@ func NewSviResourceModel(ctx context.Context, data map[string]interface{}) SviRe
 	svi.Enabled = basetypes.NewBoolValue(false)
 	for attributeName, attributeValue := range data {
 		if attributeName == "enabled" && attributeValue != nil {
-			boolAttr := attributeValue.(bool)
-			svi.Enabled = basetypes.NewBoolValue(boolAttr)
+			if boolAttr, ok := attributeValue.(bool); ok {
+				svi.Enabled = basetypes.NewBoolValue(boolAttr)
+			}
 		} else if attributeName == "ipv4Addresses" && attributeValue != nil {
-			stringListAttr := attributeValue.([]interface{})
-			if len(stringListAttr) > 0 {
+			if stringListAttr, ok := attributeValue.([]interface{}); ok && len(stringListAttr) > 0 {
 				ipv4AddressesSet, _ := types.SetValueFrom(ctx, types.StringType, stringListAttr)
 				svi.Ipv4Addresses = ipv4AddressesSet
 			}
 		} else if attributeName == "ipv6Addresses" && attributeValue != nil {
-			stringListAttr := attributeValue.([]interface{})
-			if len(stringListAttr) > 0 {
+			if stringListAttr, ok := attributeValue.([]interface{}); ok && len(stringListAttr) > 0 {
 				ipv6AddressesSet, _ := types.SetValueFrom(ctx, types.StringType, stringListAttr)
 				svi.Ipv6Addresses = ipv6AddressesSet
 			}
@@ -154,12 +153,13 @@ func NewSviResourceModel(ctx context.Context, data map[string]interface{}) SviRe
 }
 
 func NewSviObject(ctx context.Context, data []interface{}) basetypes.ObjectValue {
-	var sviObject basetypes.ObjectValue
+	sviObject := basetypes.NewObjectNull(SviResourceModelAttributeType())
 	if len(data) > 0 {
-		svi := NewSviResourceModel(ctx, data[0].(map[string]interface{}))
-		sviObject, _ = types.ObjectValueFrom(ctx, SviResourceModelAttributeType(), svi)
-	} else {
-		sviObject = basetypes.NewObjectNull(SviResourceModelAttributeType())
+		attributes, ok := data[0].(map[string]interface{})
+		if ok {
+			svi := NewSviResourceModel(ctx, attributes)
+			sviObject, _ = types.ObjectValueFrom(ctx, SviResourceModelAttributeType(), svi)
+		}
 	}
 	return sviObject
 }

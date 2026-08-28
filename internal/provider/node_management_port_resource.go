@@ -570,24 +570,27 @@ func (r *NodeManagementPortResource) Create(ctx context.Context, req resource.Cr
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/managementPorts", data.NodeId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/managementPorts", data.NodeId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	managementPortContainer, err := container.ArrayElement(0, "ports")
-	if err != nil {
+	var response nodeManagementPortsAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node management port create") {
+		return
+	}
+	createdManagementPort, ok := requireFirstAPIObject(&resp.Diagnostics, response.Ports, "created node management port")
+	if !ok {
+		return
+	}
+	managementPortID, ok := requireAPIIdentifier(&resp.Diagnostics, createdManagementPort.Id, "created node management port")
+	if !ok {
 		return
 	}
 
-	managementPortId := StripQuotes(managementPortContainer.Search("id").String())
-	if managementPortId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/managementPorts/%s", data.NodeId.ValueString(), managementPortId))
-		data.NodeManagementPortId = basetypes.NewStringValue(managementPortId)
-		getAndSetNodeManagementPortAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/managementPorts/%s", data.NodeId.ValueString(), managementPortID))
+	data.NodeManagementPortId = basetypes.NewStringValue(managementPortID)
+	getAndSetNodeManagementPortAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -607,15 +610,16 @@ func (r *NodeManagementPortResource) Read(ctx context.Context, req resource.Read
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node_management_port with id '%s'", data.Id.ValueString()))
 	checkAndSetNodeManagementPortIds(data)
-	getAndSetNodeManagementPortAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodeManagementPortResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodeManagementPortAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node_management_port with id '%s'", data.Id.ValueString()))
 }
 
@@ -694,86 +698,105 @@ func (r *NodeManagementPortResource) ImportState(ctx context.Context, req resour
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node_management_port")
 }
 
-func getAndSetNodeManagementPortAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeManagementPortResourceModel) {
-	// requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/managementPorts/%s", data.NodeId.ValueString(), data.NodeManagementPortId.ValueString()), "GET", nil)
+func getAndSetNodeManagementPortAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeManagementPortResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/managementPorts", data.NodeId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNodeManagementPort := *getNewNodeManagementPortResourceModelFromData(data)
-
-	if requestData.Data() != nil {
-		requestMap := requestData.Data().(map[string]interface{})
-		for _, ports := range requestMap {
-			listPorts := ports.([]interface{})
-			if len(listPorts) == 1 {
-				for attributeName, attributeValue := range listPorts[0].(map[string]interface{}) {
-					// if attributeName == "nodeId" && (data.NodeId.IsNull() || data.NodeId.IsUnknown() || data.NodeId.ValueString() == "" || data.NodeId.ValueString() != attributeValue.(string)) {
-					// 	newNodeManagementPort.NodeId = basetypes.NewStringValue(attributeValue.(string))
-					// 	newNodeManagementPort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s/managementPorts/%s", newNodeManagementPort.FabricId.ValueString(), newNodeManagementPort.NodeId.ValueString(), newNodeManagementPort.NodeManagementPortId.ValueString()))
-					// } else
-					if attributeName == "id" && (data.NodeManagementPortId.IsNull() || data.NodeManagementPortId.IsUnknown() || data.NodeManagementPortId.ValueString() == "" || data.NodeManagementPortId.ValueString() != attributeValue.(string)) {
-						newNodeManagementPort.NodeManagementPortId = basetypes.NewStringValue(attributeValue.(string))
-						newNodeManagementPort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/managementPorts/%s", newNodeManagementPort.NodeId.ValueString(), newNodeManagementPort.NodeManagementPortId.ValueString()))
-					} else if attributeName == "name" {
-						newNodeManagementPort.Name = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "description" {
-						newNodeManagementPort.Description = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "enabled" {
-						newNodeManagementPort.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-					} else if attributeName == "cloudUrls" {
-						newNodeManagementPort.CloudUrls = NewSetString(ctx, attributeValue.([]interface{}))
-					} else if attributeName == "ipv4ConfigType" {
-						newNodeManagementPort.Ipv4ConfigType = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "ipv4Address" {
-						newNodeManagementPort.Ipv4Address = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "ipv4Gateway" {
-						newNodeManagementPort.Ipv4Gateway = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "ipv6ConfigType" {
-						newNodeManagementPort.Ipv6ConfigType = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "ipv6Address" {
-						newNodeManagementPort.Ipv6Address = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "ipv6Gateway" {
-						newNodeManagementPort.Ipv6Gateway = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "dnsAddresses" {
-						newNodeManagementPort.DnsAddresses = NewSetString(ctx, attributeValue.([]interface{}))
-					} else if attributeName == "ntpAddresses" {
-						newNodeManagementPort.NtpAddresses = NewSetString(ctx, attributeValue.([]interface{}))
-					} else if attributeName == "noProxy" {
-						newNodeManagementPort.NoProxy = NewSetString(ctx, attributeValue.([]interface{}))
-					} else if attributeName == "proxyAddress" {
-						newNodeManagementPort.ProxyAddress = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "proxyCredentialId" {
-						newNodeManagementPort.ProxyCredentialId = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "proxyUsername" {
-						newNodeManagementPort.ProxyUsername = basetypes.NewStringValue(attributeValue.(string))
-						// Not setting password as it is not returned and want to keep state intact
-						// } else if attributeName == "proxyPassword" {
-						// 	newNodeManagementPort.ProxyPassword = basetypes.NewStringValue(attributeValue.(string))
-						// } else if attributeName == "setProxyPassword" {
-						// 	newNodeManagementPort.SetProxyPassword = basetypes.NewBoolValue(attributeValue.(bool))
-					} else if attributeName == "connectedState" {
-						newNodeManagementPort.ConnectedState = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "configOrigin" {
-						newNodeManagementPort.ConfigOrigin = basetypes.NewStringValue(attributeValue.(string))
-					} else if attributeName == "metadata" {
-						newNodeManagementPort.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-						// } else if attributeName == "labels" {
-						// 	newNodeManagementPort.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-						// } else if attributeName == "annotations" {
-						// 	newNodeManagementPort.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-					}
-				}
-			} else {
-				tflog.Debug(ctx, fmt.Sprintf("Wrong number of management ports in hyperfabric_node_management_port with id '%s", data.Id.ValueString()))
-				newNodeManagementPort.Id = basetypes.NewStringNull()
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNodeManagementPort.Id = basetypes.NewStringNull()
+		*data = newNodeManagementPort
+		return false
+	}
+
+	var response nodeManagementPortsAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node management port") {
+		return true
+	}
+
+	var managementPort *nodeManagementPortAPIResponse
+	for index := range response.Ports {
+		port := &response.Ports[index]
+		matchesID := port.Id != nil && *port.Id == data.NodeManagementPortId.ValueString()
+		matchesName := port.Name != nil && *port.Name == data.Name.ValueString()
+		if len(response.Ports) == 1 || matchesID || matchesName {
+			managementPort = port
+			break
+		}
+	}
+	if managementPort == nil {
+		newNodeManagementPort.Id = basetypes.NewStringNull()
+		*data = newNodeManagementPort
+		return false
+	}
+
+	managementPortID, ok := requireAPIIdentifier(diags, managementPort.Id, "node management port")
+	if !ok {
+		return true
+	}
+	newNodeManagementPort.NodeManagementPortId = basetypes.NewStringValue(managementPortID)
+	newNodeManagementPort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/managementPorts/%s", newNodeManagementPort.NodeId.ValueString(), managementPortID))
+	if managementPort.Name != nil {
+		newNodeManagementPort.Name = basetypes.NewStringValue(*managementPort.Name)
+	}
+	if managementPort.Description != nil {
+		newNodeManagementPort.Description = basetypes.NewStringValue(*managementPort.Description)
+	}
+	if managementPort.Enabled != nil {
+		newNodeManagementPort.Enabled = basetypes.NewBoolValue(*managementPort.Enabled)
+	}
+	if managementPort.CloudURLs != nil {
+		newNodeManagementPort.CloudUrls = NewSetString(ctx, managementPort.CloudURLs)
+	}
+	if managementPort.IPv4ConfigType != nil {
+		newNodeManagementPort.Ipv4ConfigType = basetypes.NewStringValue(*managementPort.IPv4ConfigType)
+	}
+	if managementPort.IPv4Address != nil {
+		newNodeManagementPort.Ipv4Address = basetypes.NewStringValue(*managementPort.IPv4Address)
+	}
+	if managementPort.IPv4Gateway != nil {
+		newNodeManagementPort.Ipv4Gateway = basetypes.NewStringValue(*managementPort.IPv4Gateway)
+	}
+	if managementPort.IPv6ConfigType != nil {
+		newNodeManagementPort.Ipv6ConfigType = basetypes.NewStringValue(*managementPort.IPv6ConfigType)
+	}
+	if managementPort.IPv6Address != nil {
+		newNodeManagementPort.Ipv6Address = basetypes.NewStringValue(*managementPort.IPv6Address)
+	}
+	if managementPort.IPv6Gateway != nil {
+		newNodeManagementPort.Ipv6Gateway = basetypes.NewStringValue(*managementPort.IPv6Gateway)
+	}
+	if managementPort.DNSAddresses != nil {
+		newNodeManagementPort.DnsAddresses = NewSetString(ctx, managementPort.DNSAddresses)
+	}
+	if managementPort.NTPAddresses != nil {
+		newNodeManagementPort.NtpAddresses = NewSetString(ctx, managementPort.NTPAddresses)
+	}
+	if managementPort.NoProxy != nil {
+		newNodeManagementPort.NoProxy = NewSetString(ctx, managementPort.NoProxy)
+	}
+	if managementPort.ProxyAddress != nil {
+		newNodeManagementPort.ProxyAddress = basetypes.NewStringValue(*managementPort.ProxyAddress)
+	}
+	if managementPort.ProxyCredentialId != nil {
+		newNodeManagementPort.ProxyCredentialId = basetypes.NewStringValue(*managementPort.ProxyCredentialId)
+	}
+	if managementPort.ProxyUsername != nil {
+		newNodeManagementPort.ProxyUsername = basetypes.NewStringValue(*managementPort.ProxyUsername)
+	}
+	if managementPort.ConnectedState != nil {
+		newNodeManagementPort.ConnectedState = basetypes.NewStringValue(*managementPort.ConnectedState)
+	}
+	if managementPort.ConfigOrigin != nil {
+		newNodeManagementPort.ConfigOrigin = basetypes.NewStringValue(*managementPort.ConfigOrigin)
+	}
+	if managementPort.Metadata != nil {
+		newNodeManagementPort.Metadata = NewMetadataObject(ctx, managementPort.Metadata)
 	}
 	*data = newNodeManagementPort
+	return true
 }
 
 func getNodeManagementPortJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodeManagementPortResourceModel, action string) *gabs.Container {

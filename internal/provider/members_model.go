@@ -188,19 +188,49 @@ func NewMemberResourceModel(ctx context.Context, data *MemberResourceModel, attr
 	isUntagged := false
 	for attributeName, attributeValue := range attributes {
 		if attributeName == "port" && attributeValue != nil {
-			for portAttributeName, portAttributeValue := range attributeValue.(map[string]interface{}) {
+			portAttributes, ok := attributeValue.(map[string]interface{})
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "member", attributeName, "map[string]interface {}", attributeValue)
+				continue
+			}
+			for portAttributeName, portAttributeValue := range portAttributes {
 				if portAttributeName == "portName" {
-					member.PortName = basetypes.NewStringValue(portAttributeValue.(string))
+					value, ok := portAttributeValue.(string)
+					if !ok {
+						logUnexpectedAPIValueType(ctx, "member", "port."+portAttributeName, "string", portAttributeValue)
+						continue
+					}
+					member.PortName = basetypes.NewStringValue(value)
 				} else if portAttributeName == "nodeId" {
-					member.NodeId = basetypes.NewStringValue(portAttributeValue.(string))
+					value, ok := portAttributeValue.(string)
+					if !ok {
+						logUnexpectedAPIValueType(ctx, "member", "port."+portAttributeName, "string", portAttributeValue)
+						continue
+					}
+					member.NodeId = basetypes.NewStringValue(value)
 				} else if portAttributeName == "nodeName" {
-					member.NodeName = basetypes.NewStringValue(portAttributeValue.(string))
+					value, ok := portAttributeValue.(string)
+					if !ok {
+						logUnexpectedAPIValueType(ctx, "member", "port."+portAttributeName, "string", portAttributeValue)
+						continue
+					}
+					member.NodeName = basetypes.NewStringValue(value)
 				}
 			}
 		} else if attributeName == "vlanId" {
-			member.VlanId = basetypes.NewFloat64Value(attributeValue.(float64))
+			value, ok := attributeValue.(float64)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "member", attributeName, "float64", attributeValue)
+				continue
+			}
+			member.VlanId = basetypes.NewFloat64Value(value)
 		} else if attributeName == "untagged" {
-			isUntagged = attributeValue.(bool)
+			value, ok := attributeValue.(bool)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "member", attributeName, "bool", attributeValue)
+				continue
+			}
+			isUntagged = value
 		}
 	}
 	if isUntagged {
@@ -212,8 +242,13 @@ func NewMemberResourceModel(ctx context.Context, data *MemberResourceModel, attr
 
 func NewMembersSet(ctx context.Context, data *[]MemberResourceModel, requestData []interface{}) basetypes.SetValue {
 	members := make([]MemberResourceModel, 0)
-	for _, member := range requestData {
-		newMember := NewMemberResourceModel(ctx, getEmptyMemberResourceModel(), member.(map[string]interface{}))
+	for index, member := range requestData {
+		attributes, ok := member.(map[string]interface{})
+		if !ok {
+			logUnexpectedAPIValueType(ctx, "members", fmt.Sprintf("[%d]", index), "map[string]interface {}", member)
+			continue
+		}
+		newMember := NewMemberResourceModel(ctx, getEmptyMemberResourceModel(), attributes)
 		members = append(members, newMember)
 	}
 	membersSet, _ := types.SetValueFrom(ctx, MemberResourceModelAttributeType(), members)
@@ -223,7 +258,16 @@ func NewMembersSet(ctx context.Context, data *[]MemberResourceModel, requestData
 func NewMembersSetFromSetValue(ctx context.Context, data *[]MemberResourceModel, requestData []interface{}) basetypes.SetValue {
 	members := make([]MemberResourceModel, 0)
 	for index, member := range requestData {
-		newMember := NewMemberResourceModel(ctx, &(*data)[index], member.(map[string]interface{}))
+		attributes, ok := member.(map[string]interface{})
+		if !ok {
+			logUnexpectedAPIValueType(ctx, "members", fmt.Sprintf("[%d]", index), "map[string]interface {}", member)
+			continue
+		}
+		stateMember := getEmptyMemberResourceModel()
+		if index < len(*data) {
+			stateMember = &(*data)[index]
+		}
+		newMember := NewMemberResourceModel(ctx, stateMember, attributes)
 		members = append(members, newMember)
 	}
 	membersSet, _ := types.SetValueFrom(ctx, MemberResourceModelAttributeType(), members)
