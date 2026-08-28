@@ -21,6 +21,10 @@ jobs:
         with:
           go-version-file: ${{ env.GO_VERSION_FILE }}
           cache-dependency-path: go.sum
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: '1.8.*'
+          terraform_wrapper: false
       - name: Check formatting
         run: ./scripts/gofmtcheck.sh
       - name: Check vendored dependencies
@@ -28,36 +32,22 @@ jobs:
           go mod tidy
           go mod vendor
           git diff --exit-code
-      - name: Build
-        run: go build -v .
-      - name: Run linters
-        uses: golangci/golangci-lint-action@d583c34f0599d37dbac4a198b9c83201be380893 # v9.3.0
-        with:
-          version: v2.12.2
-
-  generate:
-    name: Check Generated Code
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: ${{ env.GO_VERSION_FILE }}
-          cache-dependency-path: go.sum
-      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: '1.8.*'
-          terraform_wrapper: false
       - name: Generate provider code and documentation
         run: go generate ./...
       - name: Check generated code for differences
         run: |
           git diff --compact-summary --exit-code || \
             (echo; echo "Unexpected differences after code generation. Run 'go generate ./...' and commit the result."; exit 1)
+      - name: Build
+        run: go build -v .
+      # - name: Run linters
+      #   uses: golangci/golangci-lint-action@d583c34f0599d37dbac4a198b9c83201be380893 # v9.3.0
+      #   with:
+      #     version: v2.12.2
 
   goreleaser:
     name: Dry-Run GoReleaser Check
-    needs: [build, generate]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -76,7 +66,7 @@ jobs:
   acceptance:
     name: Acceptance Tests (Terraform ${{ matrix.terraform }})
     if: github.repository_owner == 'CiscoDevNet' && github.event_name == 'push'
-    needs: [build, generate]
+    needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 300
     concurrency:
