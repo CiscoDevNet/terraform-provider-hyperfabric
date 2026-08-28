@@ -190,7 +190,6 @@ func (r *NodeBreakoutResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "The enabled admin state of the Breakouts of the Node.",
-				Optional:            true,
 				Computed:            true,
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.UseStateForUnknown(),
@@ -323,24 +322,27 @@ func (r *NodeBreakoutResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/breakouts", data.NodeId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/breakouts", data.NodeId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	breakoutsContainer, err := container.ArrayElement(0, "breakouts")
-	if err != nil {
+	var response nodeBreakoutsAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node breakout create") {
+		return
+	}
+	createdBreakout, ok := requireFirstAPIObject(&resp.Diagnostics, response.Breakouts, "created node breakout")
+	if !ok {
+		return
+	}
+	breakoutID, ok := requireAPIIdentifier(&resp.Diagnostics, createdBreakout.Id, "created node breakout")
+	if !ok {
 		return
 	}
 
-	breakoutsId := StripQuotes(breakoutsContainer.Search("id").String())
-	if breakoutsId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", data.NodeId.ValueString(), breakoutsId))
-		data.BreakoutId = basetypes.NewStringValue(breakoutsId)
-		getAndSetNodeBreakoutAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", data.NodeId.ValueString(), breakoutID))
+	data.BreakoutId = basetypes.NewStringValue(breakoutID)
+	getAndSetNodeBreakoutAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -360,15 +362,16 @@ func (r *NodeBreakoutResource) Read(ctx context.Context, req resource.ReadReques
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node_breakout with id '%s'", data.Id.ValueString()))
 	checkAndSetNodeBreakoutIds(data)
-	getAndSetNodeBreakoutAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodeBreakoutResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodeBreakoutAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node_breakout with id '%s'", data.Id.ValueString()))
 }
 
@@ -435,10 +438,10 @@ func (r *NodeBreakoutResource) ImportState(ctx context.Context, req resource.Imp
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node_breakout")
 }
 
-func getAndSetNodeBreakoutAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeBreakoutResourceModel) {
+func getAndSetNodeBreakoutAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeBreakoutResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/breakouts/%s", data.NodeId.ValueString(), data.BreakoutId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNodeBreakout := *getNewNodeBreakoutResourceModelFromData(data)
@@ -446,45 +449,61 @@ func getAndSetNodeBreakoutAttributes(ctx context.Context, diags *diag.Diagnostic
 	node.Id = newNodeBreakout.NodeId
 	checkAndSetNodeIds(node)
 
-	if requestData.Data() != nil {
-		for attributeName, attributeValue := range requestData.Data().(map[string]interface{}) {
-			if attributeName == "id" && (data.BreakoutId.IsNull() || data.BreakoutId.IsUnknown() || data.BreakoutId.ValueString() == "" || data.BreakoutId.ValueString() != attributeValue.(string)) {
-				newNodeBreakout.BreakoutId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeBreakout.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", newNodeBreakout.NodeId.ValueString(), newNodeBreakout.BreakoutId.ValueString()))
-			} else if attributeName == "fabricId" && (node.FabricId.IsNull() || node.FabricId.IsUnknown() || node.FabricId.ValueString() == "" || node.FabricId.ValueString() != attributeValue.(string)) {
-				node.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeBreakout.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeBreakout.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", newNodeBreakout.NodeId.ValueString(), newNodeBreakout.BreakoutId.ValueString()))
-			} else if attributeName == "nodeId" && (node.NodeId.IsNull() || node.NodeId.IsUnknown() || node.NodeId.ValueString() == "" || node.NodeId.ValueString() != attributeValue.(string)) {
-				node.NodeId = basetypes.NewStringValue(attributeValue.(string))
-				newNodeBreakout.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodeBreakout.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", newNodeBreakout.NodeId.ValueString(), newNodeBreakout.BreakoutId.ValueString()))
-			} else if attributeName == "name" {
-				newNodeBreakout.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newNodeBreakout.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newNodeBreakout.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "breakouts" {
-				newNodeBreakout.Breakouts = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "ports" {
-				newNodeBreakout.Ports = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "mode" {
-				newNodeBreakout.Mode = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "pluggable" {
-				newNodeBreakout.Pluggable = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newNodeBreakout.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newNodeBreakout.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newNodeBreakout.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNodeBreakout.Id = basetypes.NewStringNull()
+		*data = newNodeBreakout
+		return false
+	}
+
+	var response nodeBreakoutAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node breakout") {
+		return true
+	}
+	breakoutID, ok := requireAPIIdentifier(diags, response.Id, "node breakout")
+	if !ok {
+		return true
+	}
+	newNodeBreakout.BreakoutId = basetypes.NewStringValue(breakoutID)
+	if response.FabricId != nil {
+		node.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	if response.NodeId != nil {
+		node.NodeId = basetypes.NewStringValue(*response.NodeId)
+	}
+	newNodeBreakout.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
+	newNodeBreakout.Id = basetypes.NewStringValue(fmt.Sprintf("%s/breakouts/%s", newNodeBreakout.NodeId.ValueString(), newNodeBreakout.BreakoutId.ValueString()))
+	if response.Name != nil {
+		newNodeBreakout.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newNodeBreakout.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newNodeBreakout.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.Breakouts != nil {
+		newNodeBreakout.Breakouts = NewSetString(ctx, response.Breakouts)
+	}
+	if response.Ports != nil {
+		newNodeBreakout.Ports = NewSetString(ctx, response.Ports)
+	}
+	if response.Mode != nil {
+		newNodeBreakout.Mode = basetypes.NewStringValue(*response.Mode)
+	}
+	if response.Pluggable != nil {
+		newNodeBreakout.Pluggable = basetypes.NewStringValue(*response.Pluggable)
+	}
+	if response.Metadata != nil {
+		newNodeBreakout.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newNodeBreakout.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newNodeBreakout.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newNodeBreakout
+	return true
 }
 
 func getNodeBreakoutJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodeBreakoutResourceModel, action string) *gabs.Container {
@@ -498,8 +517,6 @@ func getNodeBreakoutJsonPayload(ctx context.Context, diags *diag.Diagnostics, da
 	if !data.Description.IsNull() && !data.Description.IsUnknown() {
 		payloadMap["description"] = data.Description.ValueString()
 	}
-
-	payloadMap["enabled"] = true
 
 	if !data.Ports.IsNull() && !data.Ports.IsUnknown() {
 		payloadMap["ports"] = getSetStringJsonPayload(ctx, data.Ports)

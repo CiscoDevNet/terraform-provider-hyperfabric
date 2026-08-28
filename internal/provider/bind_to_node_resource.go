@@ -173,15 +173,16 @@ func (r *BindToNodeResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_bind_to_node with id '%s'", data.Id.ValueString()))
 	checkAndSetBindToNodeIds(data)
-	getAndSetBindToNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *BindToNodeResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetBindToNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_bind_to_node with id '%s'", data.Id.ValueString()))
 }
@@ -248,15 +249,15 @@ func (r *BindToNodeResource) ImportState(ctx context.Context, req resource.Impor
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_bind_to_node")
 }
 
-func getAndSetBindToNodeAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *BindToNodeResourceModel) {
+func getAndSetBindToNodeAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *BindToNodeResourceModel) bool {
 	newNode := getEmptyNodeResourceModel()
 	newNode.Id = data.NodeId
 	checkAndSetNodeIds(newNode)
-	getAndSetNodeAttributes(ctx, diags, client, newNode)
+	found := getAndSetNodeAttributes(ctx, diags, client, newNode)
 
 	newBindToNode := *getNewBindToNodeResourceModelFromData(data)
 
-	if !newNode.Id.IsNull() && !newNode.FabricId.IsUnknown() {
+	if found && !newNode.Id.IsNull() && !newNode.FabricId.IsUnknown() {
 		newBindToNode.NodeId = newNode.Id
 		newBindToNode.DeviceId = newNode.DeviceId
 		newBindToNode.Id = basetypes.NewStringValue(fmt.Sprintf("%s/devices/%s", newBindToNode.NodeId.ValueString(), newBindToNode.DeviceId.ValueString()))
@@ -264,6 +265,7 @@ func getAndSetBindToNodeAttributes(ctx context.Context, diags *diag.Diagnostics,
 		newBindToNode.Id = basetypes.NewStringNull()
 	}
 	*data = newBindToNode
+	return found
 }
 
 func checkAndSetBindToNodeIds(data *BindToNodeResourceModel) {

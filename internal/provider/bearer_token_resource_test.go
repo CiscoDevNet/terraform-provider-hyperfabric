@@ -41,8 +41,8 @@ func TestAccBearerTokenResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "name", name),
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "description", "This bearer token is powered by Cisco Nexus Hyperfabric"),
-					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_after", "2025-09-03T08:00:00.000Z"),
-					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_before", "2024-09-03T08:00:00.000Z"),
+					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_after", "2028-09-03T08:00:00.000Z"),
+					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_before", "2026-09-03T08:00:00.000Z"),
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "scope", "ADMIN"),
 				),
 			},
@@ -95,8 +95,8 @@ func TestAccBearerTokenResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "name", name),
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "description", ""),
-					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_after", "2025-09-03T08:00:00.000Z"),
-					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_before", "2024-09-03T08:00:00.000Z"),
+					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_after", "2028-09-03T08:00:00.000Z"),
+					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "not_before", "2026-09-03T08:00:00.000Z"),
 					resource.TestCheckResourceAttr("hyperfabric_bearer_token.test", "scope", "ADMIN"),
 				),
 			},
@@ -122,8 +122,8 @@ func testBearerTokenResourceHclConfig(name string, configType string) string {
 resource "hyperfabric_bearer_token" "test" {
 	name = "%[1]s"
 	description = "This bearer token is powered by Cisco Nexus Hyperfabric"
-	not_after   = "2025-09-03T08:00:00.000Z"
-    not_before  = "2024-09-03T08:00:00.000Z"
+	not_after   = "2028-09-03T08:00:00.000Z"
+    not_before  = "2026-09-03T08:00:00.000Z"
     scope       = "ADMIN"
 }
 `, name)
@@ -132,8 +132,8 @@ resource "hyperfabric_bearer_token" "test" {
 resource "hyperfabric_bearer_token" "test" {
 	name = "%[1]s"
 	description = ""
-	not_after   = "2025-09-03T08:00:00.000Z"
-    not_before  = "2024-09-03T08:00:00.000Z"
+	not_after   = "2028-09-03T08:00:00.000Z"
+    not_before  = "2026-09-03T08:00:00.000Z"
     scope       = "ADMIN"
 }
 `, name)

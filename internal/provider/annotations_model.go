@@ -8,6 +8,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -117,21 +118,33 @@ func getAnnotationsDataSourceSchemaAttribute() schema.SetNestedAttribute {
 	}
 }
 
-func NewAnnotationResourceModel(data map[string]interface{}) AnnotationResourceModel {
+func NewAnnotationResourceModel(ctx context.Context, data map[string]interface{}) AnnotationResourceModel {
 	annotation := getEmptyAnnotationResourceModel()
 	for attributeName, attributeValue := range data {
 		if attributeName == "dataType" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "annotation", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				annotation.DataType = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "name" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "annotation", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				annotation.Name = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "value" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "annotation", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				annotation.Value = basetypes.NewStringValue(stringAttr)
 			}
@@ -142,8 +155,13 @@ func NewAnnotationResourceModel(data map[string]interface{}) AnnotationResourceM
 
 func NewAnnotationsSet(ctx context.Context, data []interface{}) basetypes.SetValue {
 	annotations := make([]AnnotationResourceModel, 0)
-	for _, annotation := range data {
-		newAnnotation := NewAnnotationResourceModel(annotation.(map[string]interface{}))
+	for index, annotation := range data {
+		attributes, ok := annotation.(map[string]interface{})
+		if !ok {
+			logUnexpectedAPIValueType(ctx, "annotations", fmt.Sprintf("[%d]", index), "map[string]interface {}", annotation)
+			continue
+		}
+		newAnnotation := NewAnnotationResourceModel(ctx, attributes)
 		annotations = append(annotations, newAnnotation)
 	}
 	annotationsSet, _ := types.SetValueFrom(ctx, AnnotationResourceModelAttributeType(), annotations)
@@ -152,8 +170,13 @@ func NewAnnotationsSet(ctx context.Context, data []interface{}) basetypes.SetVal
 
 func NewNodeAnnotationsSet(ctx context.Context, data []interface{}) basetypes.SetValue {
 	annotations := make([]AnnotationResourceModel, 0)
-	for _, annotation := range data {
-		newAnnotation := NewAnnotationResourceModel(annotation.(map[string]interface{}))
+	for index, annotation := range data {
+		attributes, ok := annotation.(map[string]interface{})
+		if !ok {
+			logUnexpectedAPIValueType(ctx, "node annotations", fmt.Sprintf("[%d]", index), "map[string]interface {}", annotation)
+			continue
+		}
+		newAnnotation := NewAnnotationResourceModel(ctx, attributes)
 		if newAnnotation.Name.ValueString() != "position" {
 			annotations = append(annotations, newAnnotation)
 		}

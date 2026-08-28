@@ -340,23 +340,27 @@ func (r *VniResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/vnis", data.FabricId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/vnis", data.FabricId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	vniContainer, err := container.ArrayElement(0, "vnis")
-	if err != nil {
+	var response vnisAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "VNI create") {
 		return
 	}
-	vniId := StripQuotes(vniContainer.Search("id").String())
-	if vniId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vnis/%s", data.FabricId.ValueString(), vniId))
-		data.VniId = basetypes.NewStringValue(vniId)
-		getAndSetVniAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
+	createdVNI, ok := requireFirstAPIObject(&resp.Diagnostics, response.VNIs, "created VNI")
+	if !ok {
+		return
 	}
+	vniID, ok := requireAPIIdentifier(&resp.Diagnostics, createdVNI.Id, "created VNI")
+	if !ok {
+		return
+	}
+
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vnis/%s", data.FabricId.ValueString(), vniID))
+	data.VniId = basetypes.NewStringValue(vniID)
+	getAndSetVniAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -376,15 +380,16 @@ func (r *VniResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_vni with id '%s'", data.Id.ValueString()))
 	checkAndSetVniIds(data)
-	getAndSetVniAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *VniResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetVniAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_vni with id '%s'", data.Id.ValueString()))
 }
@@ -452,57 +457,76 @@ func (r *VniResource) ImportState(ctx context.Context, req resource.ImportStateR
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_vni with id")
 }
 
-func getAndSetVniAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *VniResourceModel) {
+func getAndSetVniAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *VniResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/vnis/%s", data.FabricId.ValueString(), data.VniId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newVni := *getNewVniResourceModelFromData(data)
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "fabricId" && (data.FabricId.IsNull() || data.FabricId.IsUnknown() || data.FabricId.ValueString() == "" || data.FabricId.ValueString() != attributeValue.(string)) {
-				newVni.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newVni.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vnis/%s", newVni.FabricId.ValueString(), newVni.VniId.ValueString()))
-			} else if attributeName == "id" && (data.VniId.IsNull() || data.VniId.IsUnknown() || data.VniId.ValueString() == "" || data.VniId.ValueString() != attributeValue.(string)) {
-				newVni.VniId = basetypes.NewStringValue(attributeValue.(string))
-				newVni.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vnis/%s", newVni.FabricId.ValueString(), newVni.VniId.ValueString()))
-			} else if attributeName == "name" {
-				newVni.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newVni.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newVni.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "isDefault" {
-				newVni.IsDefault = basetypes.NewBoolValue(attributeValue.(bool))
-				// } else if attributeName == "isL3" {
-				// 	newVni.IsL3 = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "vrfId" {
-				newVni.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
-			} else if attributeName == "vni" {
-				newVni.Vni = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "mtu" {
-				newVni.Mtu = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "members" {
-				stateMembers := make([]MemberResourceModel, 0)
-				data.Members.ElementsAs(ctx, &stateMembers, false)
-				newVni.Members = NewMembersSet(ctx, &stateMembers, attributeValue.([]interface{}))
-			} else if attributeName == "svis" {
-				newVni.Svi = NewSviObject(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "metadata" {
-				newVni.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newVni.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newVni.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newVni.Id = basetypes.NewStringNull()
+		*data = newVni
+		return false
+	}
+
+	var response vniAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "VNI") {
+		return true
+	}
+
+	if response.FabricId != nil {
+		newVni.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	vniID, ok := requireAPIIdentifier(diags, response.Id, "VNI")
+	if !ok {
+		return true
+	}
+	newVni.VniId = basetypes.NewStringValue(vniID)
+	newVni.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vnis/%s", newVni.FabricId.ValueString(), newVni.VniId.ValueString()))
+	if response.Name != nil {
+		newVni.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newVni.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newVni.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.IsDefault != nil {
+		newVni.IsDefault = basetypes.NewBoolValue(*response.IsDefault)
+	}
+	if response.VrfID != nil {
+		newVni.VrfId = customTypes.NewUuidFromIdStringValue(*response.VrfID)
+	}
+	if response.VNI != nil {
+		newVni.Vni = basetypes.NewFloat64Value(*response.VNI)
+	}
+	if response.MTU != nil {
+		newVni.Mtu = basetypes.NewFloat64Value(*response.MTU)
+	}
+	if response.Members != nil {
+		stateMembers := make([]MemberResourceModel, 0)
+		diags.Append(data.Members.ElementsAs(ctx, &stateMembers, false)...)
+		if diags.HasError() {
+			return true
+		}
+		newVni.Members = NewMembersSet(ctx, &stateMembers, response.Members)
+	}
+	if response.SVIs != nil {
+		newVni.Svi = NewSviObject(ctx, response.SVIs)
+	}
+	if response.Metadata != nil {
+		newVni.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newVni.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newVni.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newVni
+	return true
 }
 
 func getVniJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *VniResourceModel, action string) *gabs.Container {

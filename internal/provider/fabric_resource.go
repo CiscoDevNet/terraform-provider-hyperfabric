@@ -262,23 +262,26 @@ func (r *FabricResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/fabrics", "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/fabrics", "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	fabricContainer, err := container.ArrayElement(0, "fabrics")
-	if err != nil {
+	var response fabricsAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "fabric create") {
+		return
+	}
+	createdFabric, ok := requireFirstAPIObject(&resp.Diagnostics, response.Fabrics, "created fabric")
+	if !ok {
+		return
+	}
+	fabricID, ok := requireAPIIdentifier(&resp.Diagnostics, createdFabric.FabricId, "created fabric")
+	if !ok {
 		return
 	}
 
-	fabricId := StripQuotes(fabricContainer.Search("fabricId").String())
-	if fabricId != "" {
-		data.Id = basetypes.NewStringValue(fabricId)
-		getAndSetFabricAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fabricID)
+	getAndSetFabricAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -298,15 +301,16 @@ func (r *FabricResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_fabric with id '%s'", data.Id.ValueString()))
 
-	getAndSetFabricAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *FabricResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetFabricAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_fabric with id '%s'", data.Id.ValueString()))
 }
@@ -373,47 +377,61 @@ func (r *FabricResource) ImportState(ctx context.Context, req resource.ImportSta
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_fabric")
 }
 
-func getAndSetFabricAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *FabricResourceModel) {
+func getAndSetFabricAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *FabricResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s", data.Id.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newFabric := *getNewFabricResourceModelFromData(data)
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "fabricId" && (data.Id.IsNull() || data.Id.IsUnknown() || data.Id.ValueString() == "" || data.Id.ValueString() != attributeValue.(string)) {
-				newFabric.Id = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "name" {
-				newFabric.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newFabric.Description = basetypes.NewStringValue(attributeValue.(string))
-				// } else if attributeName == "enabled" {
-				// 	newFabric.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "topology" {
-				newFabric.Topology = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "location" {
-				newFabric.Location = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "address" {
-				newFabric.Address = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "city" {
-				newFabric.City = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "country" {
-				newFabric.Country = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newFabric.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newFabric.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newFabric.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newFabric.Id = basetypes.NewStringNull()
+		*data = newFabric
+		return false
+	}
+
+	var response fabricAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "fabric") {
+		return true
+	}
+
+	fabricID, ok := requireAPIIdentifier(diags, response.FabricId, "fabric")
+	if !ok {
+		return true
+	}
+	newFabric.Id = basetypes.NewStringValue(fabricID)
+	if response.Name != nil {
+		newFabric.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newFabric.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Topology != nil {
+		newFabric.Topology = basetypes.NewStringValue(*response.Topology)
+	}
+	if response.Location != nil {
+		newFabric.Location = basetypes.NewStringValue(*response.Location)
+	}
+	if response.Address != nil {
+		newFabric.Address = basetypes.NewStringValue(*response.Address)
+	}
+	if response.City != nil {
+		newFabric.City = basetypes.NewStringValue(*response.City)
+	}
+	if response.Country != nil {
+		newFabric.Country = basetypes.NewStringValue(*response.Country)
+	}
+	if response.Metadata != nil {
+		newFabric.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newFabric.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newFabric.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newFabric
+	return true
 }
 
 func getFabricJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *FabricResourceModel, action string) *gabs.Container {

@@ -20,7 +20,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+func logUnexpectedAPIValueType(ctx context.Context, object, attribute, expectedType string, value interface{}) {
+	tflog.Debug(ctx, "Ignoring API response attribute with unexpected type", map[string]interface{}{
+		"object":        object,
+		"attribute":     attribute,
+		"expected_type": expectedType,
+		"actual_type":   fmt.Sprintf("%T", value),
+	})
+}
 
 func ContainsString(strings []string, matchString string) bool {
 	for _, stringValue := range strings {
@@ -31,13 +41,19 @@ func ContainsString(strings []string, matchString string) bool {
 	return false
 }
 
-func toStringMap(intf interface{}) map[string]string {
+func toStringMap(value interface{}) map[string]string {
 	result := make(map[string]string)
-	temp := intf.(map[string]interface{})
+	values, ok := value.(map[string]interface{})
+	if !ok {
+		return result
+	}
 
-	for key, value := range temp {
-		A(result, key, value.(string))
-
+	for key, rawValue := range values {
+		stringValue, ok := rawValue.(string)
+		if !ok {
+			continue
+		}
+		A(result, key, stringValue)
 	}
 
 	return result
@@ -71,13 +87,54 @@ func G(cont *gabs.Container, key string) string {
 	return StripQuotes(cont.S(key).String())
 }
 
-func DoRestRequest(ctx context.Context, diags *diag.Diagnostics, restClient *client.Client, path, method string, payload *gabs.Container) *gabs.Container {
-	container, err := restClient.DoRestRequest(path, method, payload)
+func DoRestRequest(ctx context.Context, diags *diag.Diagnostics, restClient *client.Client, path, method string, payload *gabs.Container) *client.RestResult {
+	result, err := restClient.DoRestRequest(path, method, payload)
 	if err != nil {
 		diags.AddError(err.Summary, err.Detail)
 		return nil
 	}
-	return container
+	return result
+}
+
+func decodeRestResult(diags *diag.Diagnostics, result *client.RestResult, target interface{}, description string) bool {
+	if result == nil || !result.Found {
+		return false
+	}
+
+	if err := result.Decode(target); err != nil {
+		diags.AddError(
+			fmt.Sprintf("Failed to decode %s response", description),
+			fmt.Sprintf("The Hyperfabric API returned an unexpected response: %s", err),
+		)
+		return false
+	}
+
+	return true
+}
+
+func requireFirstAPIObject[T any](diags *diag.Diagnostics, items []T, description string) (T, bool) {
+	if len(items) > 0 {
+		return items[0], true
+	}
+
+	var zero T
+	diags.AddError(
+		fmt.Sprintf("Failed to decode %s response", description),
+		fmt.Sprintf("The Hyperfabric API response did not contain a %s object.", description),
+	)
+	return zero, false
+}
+
+func requireAPIIdentifier(diags *diag.Diagnostics, identifier *string, description string) (string, bool) {
+	if identifier != nil && *identifier != "" {
+		return *identifier, true
+	}
+
+	diags.AddError(
+		fmt.Sprintf("Failed to decode %s response", description),
+		fmt.Sprintf("The Hyperfabric API response did not contain the %s identifier.", description),
+	)
+	return "", false
 }
 
 type setToStringNullWhenStateIsNullPlanIsUnknownDuringUpdate struct{}

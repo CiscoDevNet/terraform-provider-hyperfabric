@@ -198,21 +198,33 @@ func getLocalRemoteConnectionSchemaAttribute() schema.SingleNestedAttribute {
 	}
 }
 
-func NewLocalRemoteConnectionResourceModel(data map[string]interface{}) LocalRemoteConnectionResourceModel {
+func NewLocalRemoteConnectionResourceModel(ctx context.Context, data map[string]interface{}) LocalRemoteConnectionResourceModel {
 	localRemoteConnection := getEmptyLocalRemoteConnectionResourceModel()
 	for attributeName, attributeValue := range data {
 		if attributeName == "nodeId" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "connection endpoint", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				localRemoteConnection.NodeId = customTypes.NewUuidFromIdStringValue(stringAttr)
 			}
 		} else if attributeName == "nodeName" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "connection endpoint", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				localRemoteConnection.NodeName = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "portName" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "connection endpoint", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				localRemoteConnection.PortName = basetypes.NewStringValue(stringAttr)
 			}
@@ -222,7 +234,7 @@ func NewLocalRemoteConnectionResourceModel(data map[string]interface{}) LocalRem
 }
 
 func NewLocalRemoteConnectionObject(ctx context.Context, data map[string]interface{}) basetypes.ObjectValue {
-	localRemoteConnection := NewLocalRemoteConnectionResourceModel(data)
+	localRemoteConnection := NewLocalRemoteConnectionResourceModel(ctx, data)
 	localRemoteConnectionObject, _ := types.ObjectValueFrom(ctx, LocalRemoteConnectionResourceModelAttributeType(), localRemoteConnection)
 	return localRemoteConnectionObject
 }
@@ -382,23 +394,27 @@ func (r *ConnectionResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/connections", data.FabricId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/connections", data.FabricId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	connectionContainer, err := container.ArrayElement(0, "connections")
-	if err != nil {
+	var response connectionsAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "connection create") {
 		return
 	}
-	connectionId := StripQuotes(connectionContainer.Search("id").String())
-	if connectionId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/connections/%s", data.FabricId.ValueString(), connectionId))
-		data.ConnectionId = basetypes.NewStringValue(connectionId)
-		getAndSetConnectionAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
+	createdConnection, ok := requireFirstAPIObject(&resp.Diagnostics, response.Connections, "created connection")
+	if !ok {
+		return
 	}
+	connectionID, ok := requireAPIIdentifier(&resp.Diagnostics, createdConnection.Id, "created connection")
+	if !ok {
+		return
+	}
+
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/connections/%s", data.FabricId.ValueString(), connectionID))
+	data.ConnectionId = basetypes.NewStringValue(connectionID)
+	getAndSetConnectionAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -418,15 +434,16 @@ func (r *ConnectionResource) Read(ctx context.Context, req resource.ReadRequest,
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_connection with id '%s'", data.Id.ValueString()))
 	checkAndSetConnectionIds(data)
-	getAndSetConnectionAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *ConnectionResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetConnectionAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_connection with id '%s'", data.Id.ValueString()))
 }
 
@@ -493,51 +510,52 @@ func (r *ConnectionResource) ImportState(ctx context.Context, req resource.Impor
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_connection with id")
 }
 
-func getAndSetConnectionAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *ConnectionResourceModel) {
+func getAndSetConnectionAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *ConnectionResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/connections/%s", data.FabricId.ValueString(), data.ConnectionId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newConnection := *getNewConnectionResourceModelFromData(data)
+	if requestData == nil || !requestData.Found {
+		newConnection.Id = basetypes.NewStringNull()
+		*data = newConnection
+		return false
+	}
 
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "id" && (data.ConnectionId.IsNull() || data.ConnectionId.IsUnknown() || data.ConnectionId.ValueString() == "" || data.ConnectionId.ValueString() != attributeValue.(string)) {
-				newConnection.ConnectionId = basetypes.NewStringValue(attributeValue.(string))
-				newConnection.Id = basetypes.NewStringValue(fmt.Sprintf("%s/connections/%s", newConnection.FabricId.ValueString(), newConnection.ConnectionId.ValueString()))
-			} else if attributeName == "fabricId" && (data.FabricId.IsNull() || data.FabricId.IsUnknown() || data.FabricId.ValueString() == "" || data.FabricId.ValueString() != attributeValue.(string)) {
-				newConnection.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newConnection.Id = basetypes.NewStringValue(fmt.Sprintf("%s/connections/%s", newConnection.FabricId.ValueString(), newConnection.ConnectionId.ValueString()))
-			} else if attributeName == "description" {
-				newConnection.Description = basetypes.NewStringValue(attributeValue.(string))
-				// } else if attributeName == "cableType" {
-				// 	newConnection.CableType = basetypes.NewStringValue(attributeValue.(string))
-				// } else if attributeName == "cableLength" {
-				// 	newConnection.CableLength = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "pluggable" {
-				newConnection.Pluggable = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "local" {
-				newConnection.Local = NewLocalRemoteConnectionObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "remote" {
-				newConnection.Remote = NewLocalRemoteConnectionObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "osType" {
-				newConnection.OsType = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "unrecognized" {
-				newConnection.Unrecognized = basetypes.NewBoolValue(attributeValue.(bool))
-				// } else if attributeName == "metadata" {
-				// 	newConnection.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-				// } else if attributeName == "labels" {
-				// 	newConnection.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-				// } else if attributeName == "annotations" {
-				// 	newConnection.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
-		data.Id = basetypes.NewStringNull()
+	var response connectionAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "connection") {
+		return true
+	}
+	connectionID, ok := requireAPIIdentifier(diags, response.Id, "connection")
+	if !ok {
+		return true
+	}
+	newConnection.ConnectionId = basetypes.NewStringValue(connectionID)
+	if response.FabricId != nil {
+		newConnection.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	newConnection.Id = basetypes.NewStringValue(fmt.Sprintf("%s/connections/%s", newConnection.FabricId.ValueString(), newConnection.ConnectionId.ValueString()))
+	if response.Description != nil {
+		newConnection.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Pluggable != nil {
+		newConnection.Pluggable = basetypes.NewStringValue(*response.Pluggable)
+	}
+	if response.Local != nil {
+		newConnection.Local = NewLocalRemoteConnectionObject(ctx, response.Local)
+	}
+	if response.Remote != nil {
+		newConnection.Remote = NewLocalRemoteConnectionObject(ctx, response.Remote)
+	}
+	if response.OSType != nil {
+		newConnection.OsType = basetypes.NewStringValue(*response.OSType)
+	}
+	if response.Unrecognized != nil {
+		newConnection.Unrecognized = basetypes.NewBoolValue(*response.Unrecognized)
 	}
 	*data = newConnection
+	return true
 }
 
 func getConnectionJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *ConnectionResourceModel, action string) *gabs.Container {

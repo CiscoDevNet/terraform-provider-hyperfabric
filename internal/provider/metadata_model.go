@@ -99,31 +99,51 @@ func getMetadataSchemaAttribute() schema.SingleNestedAttribute {
 	}
 }
 
-func NewMetadataResourceModel(data map[string]interface{}) MetadataResourceModel {
+func NewMetadataResourceModel(ctx context.Context, data map[string]interface{}) MetadataResourceModel {
 	metadata := getEmptyMetadataResourceModel()
 	for attributeName, attributeValue := range data {
 		if attributeName == "createdAt" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "metadata", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				metadata.CreatedAt = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "createdBy" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "metadata", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				metadata.CreatedBy = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "modifiedAt" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "metadata", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				metadata.ModifiedAt = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "modifiedBy" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "metadata", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				metadata.ModifiedBy = basetypes.NewStringValue(stringAttr)
 			}
 		} else if attributeName == "revisionId" && attributeValue != nil {
-			stringAttr := attributeValue.(string)
+			stringAttr, ok := attributeValue.(string)
+			if !ok {
+				logUnexpectedAPIValueType(ctx, "metadata", attributeName, "string", attributeValue)
+				continue
+			}
 			if stringAttr != "" {
 				metadata.RevisionId = basetypes.NewStringValue(stringAttr)
 			}
@@ -133,7 +153,7 @@ func NewMetadataResourceModel(data map[string]interface{}) MetadataResourceModel
 }
 
 func NewMetadataObject(ctx context.Context, data map[string]interface{}) basetypes.ObjectValue {
-	metadata := NewMetadataResourceModel(data)
+	metadata := NewMetadataResourceModel(ctx, data)
 	metadataObject, _ := types.ObjectValueFrom(ctx, MetadataResourceModelAttributeType(), metadata)
 	return metadataObject
 }

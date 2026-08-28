@@ -220,23 +220,26 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/users", "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, "/api/v1/users", "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	userContainer, err := container.ArrayElement(0, "users")
-	if err != nil {
+	var response usersAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "user create") {
+		return
+	}
+	createdUser, ok := requireFirstAPIObject(&resp.Diagnostics, response.Users, "created user")
+	if !ok {
+		return
+	}
+	userID, ok := requireAPIIdentifier(&resp.Diagnostics, createdUser.Id, "created user")
+	if !ok {
 		return
 	}
 
-	userId := StripQuotes(userContainer.Search("id").String())
-	if userId != "" {
-		data.Id = basetypes.NewStringValue(userId)
-		getAndSetUserAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(userID)
+	getAndSetUserAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -256,15 +259,16 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_user with id '%s'", data.Id.ValueString()))
 
-	getAndSetUserAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *UserResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetUserAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_user with id '%s'", data.Id.ValueString()))
 }
@@ -331,44 +335,51 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_user")
 }
 
-func getAndSetUserAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *UserResourceModel) {
+func getAndSetUserAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *UserResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/users/%s", data.Id.ValueString()), "GET", nil)
-	// requestData := DoRestRequest(ctx, diags, client, "/api/v1/users", "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newUser := *getNewUserResourceModelFromData(data)
-	// newUser.Id = data.Id
-	// newUser.Email = data.Email
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "id" && (data.Id.IsNull() || data.Id.IsUnknown() || data.Id.ValueString() == "" || data.Id.ValueString() != attributeValue.(string)) {
-				newUser.Id = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "email" {
-				newUser.Email = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "provider" {
-				newUser.Provider = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "lastLogin" {
-				newUser.LastLogin = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newUser.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "role" {
-				newUser.Role = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newUser.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newUser.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-				// } else if attributeName == "annotations" {
-				// 	newUser.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newUser.Id = basetypes.NewStringNull()
+		*data = newUser
+		return false
+	}
+
+	var response userAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "user") {
+		return true
+	}
+	userID, ok := requireAPIIdentifier(diags, response.Id, "user")
+	if !ok {
+		return true
+	}
+	newUser.Id = basetypes.NewStringValue(userID)
+	if response.Email != nil {
+		newUser.Email = basetypes.NewStringValue(*response.Email)
+	}
+	if response.Provider != nil {
+		newUser.Provider = basetypes.NewStringValue(*response.Provider)
+	}
+	if response.LastLogin != nil {
+		newUser.LastLogin = basetypes.NewStringValue(*response.LastLogin)
+	}
+	if response.Enabled != nil {
+		newUser.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.Role != nil {
+		newUser.Role = basetypes.NewStringValue(*response.Role)
+	}
+	if response.Metadata != nil {
+		newUser.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newUser.Labels = NewSetString(ctx, response.Labels)
 	}
 	*data = newUser
+	return true
 }
 
 func getUserJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *UserResourceModel, action string) *gabs.Container {

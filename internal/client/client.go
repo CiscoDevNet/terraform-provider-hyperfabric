@@ -455,9 +455,14 @@ func (c *Client) Do(req *http.Request) (*gabs.Container, *http.Response, error) 
 			if err != nil {
 				unrecoverableError = true
 			} else {
-				restError := NewRestError(obj.Data().(map[string]interface{}))
-				if restError.ErrCode != "ERR_CODE_SERVICE_UNAVAILABLE" && restError.ErrCode != "ERR_CODE_TOO_MANY_REQUESTS" {
+				responseData, ok := obj.Data().(map[string]interface{})
+				if !ok {
 					unrecoverableError = true
+				} else {
+					restError := NewRestError(responseData)
+					if restError.ErrCode != "ERR_CODE_SERVICE_UNAVAILABLE" && restError.ErrCode != "ERR_CODE_TOO_MANY_REQUESTS" {
+						unrecoverableError = true
+					}
 				}
 			}
 			if ok := c.backoff(attempts); unrecoverableError || !ok {
@@ -533,6 +538,30 @@ type DiagError struct {
 	Detail  string
 }
 
+// RestResult represents the outcome of a REST request. A successful GET or
+// DELETE for an object that no longer exists returns a result with Found set to
+// false instead of returning an ambiguous nil response.
+type RestResult struct {
+	*gabs.Container
+	StatusCode int
+	Found      bool
+}
+
+// Decode unmarshals a successful JSON response into target.
+func (r *RestResult) Decode(target interface{}) error {
+	if r == nil {
+		return fmt.Errorf("cannot decode a nil REST result")
+	}
+	if !r.Found {
+		return fmt.Errorf("cannot decode a REST result for an object that was not found")
+	}
+	if r.Container == nil {
+		return fmt.Errorf("REST response with HTTP status code %d did not contain a JSON body", r.StatusCode)
+	}
+
+	return json.Unmarshal(r.Bytes(), target)
+}
+
 func getDiagError(summary string, detail string) *DiagError {
 	return &DiagError{
 		Summary: summary,
@@ -568,37 +597,43 @@ func (e RestError) ToString() string {
 // }
 
 func NewRestError(data map[string]interface{}) RestError {
-	var restError RestError
-	restError.ErrCode = "NO_ERROR_CODE"
-	for attributeName, attributeValue := range data {
-		if attributeName == "causes" && attributeValue != nil {
-			newCauses := make([]string, 0)
-			for _, cause := range attributeValue.([]interface{}) {
-				newCauses = append(newCauses, fmt.Sprint(cause))
-			}
-			restError.Causes = newCauses
-		} else if attributeName == "critical" && attributeValue != nil {
-			restError.Critical = attributeValue.(bool)
-		} else if attributeName == "errCode" && attributeValue != nil {
-			restError.ErrCode = attributeValue.(string)
-		} else if attributeName == "field" && attributeValue != nil {
-			restError.Field = attributeValue.(string)
-		} else if attributeName == "message" && attributeValue != nil {
-			restError.Message = attributeValue.(string)
-		} else if attributeName == "notes" && attributeValue != nil {
-			restError.Notes = attributeValue.(string)
-		} else if attributeName == "status" && attributeValue != nil {
-			restError.Status = attributeValue.(float64)
-		} else if attributeName == "trackingId" && attributeValue != nil {
-			restError.TrackingId = attributeValue.(string)
-		} else if attributeName == "value" && attributeValue != nil {
-			restError.Value = attributeValue.(string)
+	restError := RestError{ErrCode: "NO_ERROR_CODE"}
+
+	if causes, ok := data["causes"].([]interface{}); ok {
+		restError.Causes = make([]string, 0, len(causes))
+		for _, cause := range causes {
+			restError.Causes = append(restError.Causes, fmt.Sprint(cause))
 		}
 	}
+	if critical, ok := data["critical"].(bool); ok {
+		restError.Critical = critical
+	}
+	if errCode, ok := data["errCode"].(string); ok {
+		restError.ErrCode = errCode
+	}
+	if field, ok := data["field"].(string); ok {
+		restError.Field = field
+	}
+	if message, ok := data["message"].(string); ok {
+		restError.Message = message
+	}
+	if notes, ok := data["notes"].(string); ok {
+		restError.Notes = notes
+	}
+	if status, ok := data["status"].(float64); ok {
+		restError.Status = status
+	}
+	if trackingID, ok := data["trackingId"].(string); ok {
+		restError.TrackingId = trackingID
+	}
+	if value, ok := data["value"].(string); ok {
+		restError.Value = value
+	}
+
 	return restError
 }
 
-func (c *Client) DoRestRequest(path, method string, payload *gabs.Container) (*gabs.Container, *DiagError) {
+func (c *Client) DoRestRequest(path, method string, payload *gabs.Container) (*RestResult, *DiagError) {
 	restRequest, err := c.MakeRestRequest(method, path, payload, nil, true)
 	if err != nil {
 		errString := fmt.Sprintf("Error: %s. Please report this issue to the provider developers.", err)
@@ -615,31 +650,53 @@ func (c *Client) DoRestRequest(path, method string, payload *gabs.Container) (*g
 	container, restResponse, err := c.Do(restRequest)
 	// c.lockRequest.Unlock()
 
-	if restResponse != nil && container.Data() != nil && (restResponse.StatusCode != 200 && restResponse.StatusCode != 204) {
-		restError := NewRestError(container.Data().(map[string]interface{}))
-
-		// Need error codes for:  Cannot create object, Cannot delete object
-		log.Printf("[DEBUG] The %s REST request to %s failed with HTTP Status Code %d, %s", strings.ToUpper(method), path, restResponse.StatusCode, restError.ToString())
-
-		if restResponse.StatusCode == 404 && (strings.ToLower(method) == "get" || strings.ToLower(method) == "delete") {
-			return nil, nil
-		} else {
-			diagError := getDiagError(
-				fmt.Sprintf("The %s REST request to %s failed with HTTP Status Code %d", strings.ToUpper(method), path, restResponse.StatusCode),
-				fmt.Sprintf("%s, err: %v. Please report this issue to the provider developers.", restError.ToString(), err),
-			)
-			return nil, diagError
-		}
-	} else if err != nil {
-		if restResponse == nil || !(restResponse.StatusCode == 404 && (strings.ToLower(method) == "get" || strings.ToLower(method) == "delete")) {
-			diagError := getDiagError(
-				fmt.Sprintf("The %s REST request to %s failed with HTTP Status Code %d", strings.ToUpper(method), path, restResponse.StatusCode),
-				fmt.Sprintf("Err: %s. Please report this issue to the provider developers.", err),
-			)
-			return nil, diagError
-		}
-		return nil, nil
+	statusCode := 0
+	if restResponse != nil {
+		statusCode = restResponse.StatusCode
 	}
 
-	return container, nil
+	isNotFound := statusCode == http.StatusNotFound && (strings.EqualFold(method, http.MethodGet) || strings.EqualFold(method, http.MethodDelete))
+	if isNotFound {
+		return &RestResult{Container: container, StatusCode: statusCode, Found: false}, nil
+	}
+
+	if err != nil {
+		summary := fmt.Sprintf("The %s REST request to %s failed", strings.ToUpper(method), path)
+		if restResponse != nil {
+			summary = fmt.Sprintf("%s with HTTP Status Code %d", summary, statusCode)
+		}
+		diagError := getDiagError(
+			summary,
+			fmt.Sprintf("Err: %s. Please report this issue to the provider developers.", err),
+		)
+		return nil, diagError
+	}
+
+	if restResponse == nil {
+		diagError := getDiagError(
+			fmt.Sprintf("The %s REST request to %s failed", strings.ToUpper(method), path),
+			"The Hyperfabric service returned no HTTP response. Please report this issue to the provider developers.",
+		)
+		return nil, diagError
+	}
+
+	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		restError := RestError{ErrCode: "NO_ERROR_CODE"}
+		if container != nil {
+			if responseData, ok := container.Data().(map[string]interface{}); ok {
+				restError = NewRestError(responseData)
+			}
+		}
+
+		// Need error codes for:  Cannot create object, Cannot delete object
+		log.Printf("[DEBUG] The %s REST request to %s failed with HTTP Status Code %d, %s", strings.ToUpper(method), path, statusCode, restError.ToString())
+
+		diagError := getDiagError(
+			fmt.Sprintf("The %s REST request to %s failed with HTTP Status Code %d", strings.ToUpper(method), path, statusCode),
+			fmt.Sprintf("%s. Please report this issue to the provider developers.", restError.ToString()),
+		)
+		return nil, diagError
+	}
+
+	return &RestResult{Container: container, StatusCode: statusCode, Found: true}, nil
 }

@@ -524,19 +524,23 @@ func (r *NodePortResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/ports/%s", data.NodeId.ValueString(), data.Name.ValueString()), "PUT", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/ports/%s", data.NodeId.ValueString(), data.Name.ValueString()), "PUT", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	portId := StripQuotes(container.Search("id").String())
-	if portId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", data.NodeId.ValueString(), portId))
-		data.PortId = basetypes.NewStringValue(portId)
-		getAndSetNodePortAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
+	var response nodePortAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node port create") {
+		return
 	}
+	portID, ok := requireAPIIdentifier(&resp.Diagnostics, response.Id, "created node port")
+	if !ok {
+		return
+	}
+
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", data.NodeId.ValueString(), portID))
+	data.PortId = basetypes.NewStringValue(portID)
+	getAndSetNodePortAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -556,15 +560,16 @@ func (r *NodePortResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node_port with id '%s'", data.Id.ValueString()))
 	checkAndSetNodePortIds(data)
-	getAndSetNodePortAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodePortResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodePortAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node_port with id '%s'", data.Id.ValueString()))
 }
 
@@ -660,10 +665,10 @@ func (r *NodePortResource) ImportState(ctx context.Context, req resource.ImportS
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node_port")
 }
 
-func getAndSetNodePortAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodePortResourceModel) {
+func getAndSetNodePortAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodePortResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/ports/%s", data.NodeId.ValueString(), data.PortId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNodePort := *getNewNodePortResourceModelFromData(data)
@@ -671,74 +676,97 @@ func getAndSetNodePortAttributes(ctx context.Context, diags *diag.Diagnostics, c
 	node.Id = newNodePort.NodeId
 	checkAndSetNodeIds(node)
 
-	if requestData.Data() != nil {
-		for attributeName, attributeValue := range requestData.Data().(map[string]interface{}) {
-			if attributeName == "id" && (data.PortId.IsNull() || data.PortId.IsUnknown() || data.PortId.ValueString() == "" || data.PortId.ValueString() != attributeValue.(string)) {
-				newNodePort.PortId = basetypes.NewStringValue(attributeValue.(string))
-				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
-			} else if attributeName == "fabricId" && (node.FabricId.IsNull() || node.FabricId.IsUnknown() || node.FabricId.ValueString() == "" || node.FabricId.ValueString() != attributeValue.(string)) {
-				node.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
-			} else if attributeName == "nodeId" && (node.NodeId.IsNull() || node.NodeId.IsUnknown() || node.NodeId.ValueString() == "" || node.NodeId.ValueString() != attributeValue.(string)) {
-				node.NodeId = basetypes.NewStringValue(attributeValue.(string))
-				newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
-				newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
-			} else if attributeName == "name" {
-				newNodePort.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newNodePort.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newNodePort.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-				// } else if attributeName == "breakout" {
-				// 	newNodePort.Breakout = basetypes.NewBoolValue(attributeValue.(bool))
-				// } else if attributeName == "breakoutIndex" {
-				// 	newNodePort.BreakoutIndex = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "index" {
-				newNodePort.Index = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "ipv4Addresses" {
-				newNodePort.Ipv4Addresses = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "ipv6Addresses" {
-				newNodePort.Ipv6Addresses = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "linecard" {
-				newNodePort.Linecard = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "linkDown" {
-				newNodePort.PreventForwarding = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "lldpHost" {
-				newNodePort.LldpHost = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "lldpInfo" {
-				newNodePort.LldpInfo = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "lldpPort" {
-				newNodePort.LldpPort = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "maxSpeed" {
-				newNodePort.MaxSpeed = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "mtu" {
-				newNodePort.Mtu = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "roles" {
-				newNodePort.Roles = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "speed" {
-				newNodePort.Speed = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "subInfCount" {
-				newNodePort.SubInterfacesCount = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "vlanIds" {
-				newNodePort.VlanIds = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "vnis" {
-				newNodePort.Vnis = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "vrfId" {
-				newNodePort.VrfId = customTypes.NewUuidFromIdStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newNodePort.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newNodePort.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newNodePort.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNodePort.Id = basetypes.NewStringNull()
+		*data = newNodePort
+		return false
+	}
+
+	var response nodePortAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node port") {
+		return true
+	}
+	portID, ok := requireAPIIdentifier(diags, response.Id, "node port")
+	if !ok {
+		return true
+	}
+	newNodePort.PortId = basetypes.NewStringValue(portID)
+	if response.FabricId != nil {
+		node.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	if response.NodeId != nil {
+		node.NodeId = basetypes.NewStringValue(*response.NodeId)
+	}
+	newNodePort.NodeId = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", node.FabricId.ValueString(), node.NodeId.ValueString()))
+	newNodePort.Id = basetypes.NewStringValue(fmt.Sprintf("%s/ports/%s", newNodePort.NodeId.ValueString(), newNodePort.PortId.ValueString()))
+	if response.Name != nil {
+		newNodePort.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newNodePort.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newNodePort.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.Index != nil {
+		newNodePort.Index = basetypes.NewFloat64Value(*response.Index)
+	}
+	if response.IPv4Addresses != nil {
+		newNodePort.Ipv4Addresses = NewSetString(ctx, response.IPv4Addresses)
+	}
+	if response.IPv6Addresses != nil {
+		newNodePort.Ipv6Addresses = NewSetString(ctx, response.IPv6Addresses)
+	}
+	if response.Linecard != nil {
+		newNodePort.Linecard = basetypes.NewFloat64Value(*response.Linecard)
+	}
+	if response.PreventForwarding != nil {
+		newNodePort.PreventForwarding = basetypes.NewBoolValue(*response.PreventForwarding)
+	}
+	if response.LLDPHost != nil {
+		newNodePort.LldpHost = basetypes.NewStringValue(*response.LLDPHost)
+	}
+	if response.LLDPInfo != nil {
+		newNodePort.LldpInfo = basetypes.NewStringValue(*response.LLDPInfo)
+	}
+	if response.LLDPPort != nil {
+		newNodePort.LldpPort = basetypes.NewStringValue(*response.LLDPPort)
+	}
+	if response.MaxSpeed != nil {
+		newNodePort.MaxSpeed = basetypes.NewStringValue(*response.MaxSpeed)
+	}
+	if response.MTU != nil {
+		newNodePort.Mtu = basetypes.NewFloat64Value(*response.MTU)
+	}
+	if response.Roles != nil {
+		newNodePort.Roles = NewSetString(ctx, response.Roles)
+	}
+	if response.Speed != nil {
+		newNodePort.Speed = basetypes.NewStringValue(*response.Speed)
+	}
+	if response.SubInterfacesCount != nil {
+		newNodePort.SubInterfacesCount = basetypes.NewFloat64Value(*response.SubInterfacesCount)
+	}
+	if response.VLANIDs != nil {
+		newNodePort.VlanIds = NewSetString(ctx, response.VLANIDs)
+	}
+	if response.VNIs != nil {
+		newNodePort.Vnis = NewSetString(ctx, response.VNIs)
+	}
+	if response.VrfID != nil {
+		newNodePort.VrfId = customTypes.NewUuidFromIdStringValue(*response.VrfID)
+	}
+	if response.Metadata != nil {
+		newNodePort.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newNodePort.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newNodePort.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newNodePort
+	return true
 }
 
 func getNodePortJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodePortResourceModel, action string) *gabs.Container {

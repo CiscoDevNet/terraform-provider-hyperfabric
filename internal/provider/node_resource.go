@@ -314,24 +314,27 @@ func (r *NodeResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/nodes", data.FabricId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/nodes", data.FabricId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	r.client.AddChangedFabric(data.FabricId.ValueString())
-	nodeContainer, err := container.ArrayElement(0, "nodes")
-	if err != nil {
+	var response nodesAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "node create") {
+		return
+	}
+	createdNode, ok := requireFirstAPIObject(&resp.Diagnostics, response.Nodes, "created node")
+	if !ok {
+		return
+	}
+	nodeID, ok := requireAPIIdentifier(&resp.Diagnostics, createdNode.NodeId, "created node")
+	if !ok {
 		return
 	}
 
-	nodeId := StripQuotes(nodeContainer.Search("nodeId").String())
-	if nodeId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", data.FabricId.ValueString(), nodeId))
-		data.NodeId = basetypes.NewStringValue(nodeId)
-		getAndSetNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", data.FabricId.ValueString(), nodeID))
+	data.NodeId = basetypes.NewStringValue(nodeID)
+	getAndSetNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -351,15 +354,16 @@ func (r *NodeResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_node with id '%s'", data.Id.ValueString()))
 	checkAndSetNodeIds(data)
-	getAndSetNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *NodeResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetNodeAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_node with id '%s'", data.Id.ValueString()))
 }
 
@@ -436,52 +440,66 @@ func (r *NodeResource) ImportState(ctx context.Context, req resource.ImportState
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_node")
 }
 
-func getAndSetNodeAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeResourceModel) {
+func getAndSetNodeAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *NodeResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/nodes/%s", data.FabricId.ValueString(), data.NodeId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newNode := *getNewNodeResourceModelFromData(data)
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "nodeId" && (data.NodeId.IsNull() || data.NodeId.IsUnknown() || data.NodeId.ValueString() == "" || data.NodeId.ValueString() != attributeValue.(string)) {
-				newNode.NodeId = basetypes.NewStringValue(attributeValue.(string))
-				newNode.Id = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", newNode.FabricId.ValueString(), newNode.NodeId.ValueString()))
-			} else if attributeName == "fabricId" {
-			} else if attributeName == "name" {
-				newNode.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newNode.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newNode.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "location" {
-				newNode.Location = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "modelName" {
-				newNode.ModelName = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "serialNumber" {
-				newNode.SerialNumber = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "deviceId" {
-				newNode.DeviceId = basetypes.NewStringValue(attributeValue.(string))
-				// } else if attributeName == "position" {
-				// 	newNode.Position = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "roles" {
-				newNode.Roles = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "metadata" {
-				newNode.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newNode.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newNode.Annotations = NewNodeAnnotationsSet(ctx, attributeValue.([]interface{}))
-				newNode.Position = NewPositionString(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newNode.Id = basetypes.NewStringNull()
+		*data = newNode
+		return false
+	}
+
+	var response nodeAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "node") {
+		return true
+	}
+
+	nodeID, ok := requireAPIIdentifier(diags, response.NodeId, "node")
+	if !ok {
+		return true
+	}
+	newNode.NodeId = basetypes.NewStringValue(nodeID)
+	newNode.Id = basetypes.NewStringValue(fmt.Sprintf("%s/nodes/%s", newNode.FabricId.ValueString(), nodeID))
+	if response.Name != nil {
+		newNode.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newNode.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newNode.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.Location != nil {
+		newNode.Location = basetypes.NewStringValue(*response.Location)
+	}
+	if response.ModelName != nil {
+		newNode.ModelName = basetypes.NewStringValue(*response.ModelName)
+	}
+	if response.SerialNumber != nil {
+		newNode.SerialNumber = basetypes.NewStringValue(*response.SerialNumber)
+	}
+	if response.DeviceId != nil {
+		newNode.DeviceId = basetypes.NewStringValue(*response.DeviceId)
+	}
+	if response.Roles != nil {
+		newNode.Roles = NewSetString(ctx, response.Roles)
+	}
+	if response.Metadata != nil {
+		newNode.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newNode.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newNode.Annotations = NewNodeAnnotationsSet(ctx, response.Annotations)
+		newNode.Position = NewPositionString(ctx, response.Annotations)
 	}
 	*data = newNode
+	return true
 }
 
 func getNodeJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *NodeResourceModel, action string) *gabs.Container {
@@ -567,8 +585,13 @@ func getNodeJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *Node
 
 func NewPositionString(ctx context.Context, data []interface{}) basetypes.StringValue {
 	var position string
-	for _, annotation := range data {
-		newAnnotation := NewAnnotationResourceModel(annotation.(map[string]interface{}))
+	for index, annotation := range data {
+		attributes, ok := annotation.(map[string]interface{})
+		if !ok {
+			logUnexpectedAPIValueType(ctx, "node annotations", fmt.Sprintf("[%d]", index), "map[string]interface {}", annotation)
+			continue
+		}
+		newAnnotation := NewAnnotationResourceModel(ctx, attributes)
 		if newAnnotation.Name.ValueString() == "position" {
 			position = newAnnotation.Value.ValueString()
 		}

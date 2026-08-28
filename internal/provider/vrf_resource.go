@@ -274,24 +274,27 @@ func (r *VrfResource) Create(ctx context.Context, req resource.CreateRequest, re
 		return
 	}
 
-	container := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/vrfs", data.FabricId.ValueString()), "POST", jsonPayload)
+	result := DoRestRequest(ctx, &resp.Diagnostics, r.client, fmt.Sprintf("/api/v1/fabrics/%s/vrfs", data.FabricId.ValueString()), "POST", jsonPayload)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	vrfContainer, err := container.ArrayElement(0, "vrfs")
-	if err != nil {
+	var response vrfsAPIResponse
+	if !decodeRestResult(&resp.Diagnostics, result, &response, "VRF create") {
+		return
+	}
+	createdVRF, ok := requireFirstAPIObject(&resp.Diagnostics, response.VRFs, "created VRF")
+	if !ok {
+		return
+	}
+	vrfID, ok := requireAPIIdentifier(&resp.Diagnostics, createdVRF.Id, "created VRF")
+	if !ok {
 		return
 	}
 
-	vrfId := StripQuotes(vrfContainer.Search("id").String())
-	if vrfId != "" {
-		data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vrfs/%s", data.FabricId.ValueString(), vrfId))
-		data.VrfId = basetypes.NewStringValue(vrfId)
-		getAndSetVrfAttributes(ctx, &resp.Diagnostics, r.client, data)
-	} else {
-		data.Id = basetypes.NewStringNull()
-	}
+	data.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vrfs/%s", data.FabricId.ValueString(), vrfID))
+	data.VrfId = basetypes.NewStringValue(vrfID)
+	getAndSetVrfAttributes(ctx, &resp.Diagnostics, r.client, data)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -311,15 +314,16 @@ func (r *VrfResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 
 	tflog.Debug(ctx, fmt.Sprintf("Read of resource hyperfabric_vrf with id '%s'", data.Id.ValueString()))
 	checkAndSetVrfIds(data)
-	getAndSetVrfAttributes(ctx, &resp.Diagnostics, r.client, data)
-
-	// Save updated data into Terraform state
-	if data.Id.IsNull() {
-		var emptyData *VrfResourceModel
-		resp.Diagnostics.Append(resp.State.Set(ctx, &emptyData)...)
-	} else {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	found := getAndSetVrfAttributes(ctx, &resp.Diagnostics, r.client, data)
+	if resp.Diagnostics.HasError() {
+		return
 	}
+	if !found {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	tflog.Debug(ctx, fmt.Sprintf("End read of resource hyperfabric_vrf with id '%s'", data.Id.ValueString()))
 }
 
@@ -386,49 +390,65 @@ func (r *VrfResource) ImportState(ctx context.Context, req resource.ImportStateR
 	tflog.Debug(ctx, "End import of state resource: hyperfabric_vrf with id")
 }
 
-func getAndSetVrfAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *VrfResourceModel) {
+func getAndSetVrfAttributes(ctx context.Context, diags *diag.Diagnostics, client *client.Client, data *VrfResourceModel) bool {
 	requestData := DoRestRequest(ctx, diags, client, fmt.Sprintf("/api/v1/fabrics/%s/vrfs/%s", data.FabricId.ValueString(), data.VrfId.ValueString()), "GET", nil)
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	newVrf := *getNewVrfResourceModelFromData(data)
-
-	if requestData.Data() != nil {
-		attributes := requestData.Data().(map[string]interface{})
-		for attributeName, attributeValue := range attributes {
-			if attributeName == "fabricId" && (data.FabricId.IsNull() || data.FabricId.IsUnknown() || data.FabricId.ValueString() == "" || data.FabricId.ValueString() != attributeValue.(string)) {
-				newVrf.FabricId = basetypes.NewStringValue(attributeValue.(string))
-				newVrf.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vrfs/%s", newVrf.FabricId.ValueString(), newVrf.VrfId.ValueString()))
-			} else if attributeName == "id" && (data.VrfId.IsNull() || data.VrfId.IsUnknown() || data.VrfId.ValueString() == "" || data.VrfId.ValueString() != attributeValue.(string)) {
-				newVrf.VrfId = basetypes.NewStringValue(attributeValue.(string))
-				newVrf.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vrfs/%s", newVrf.FabricId.ValueString(), newVrf.VrfId.ValueString()))
-			} else if attributeName == "name" {
-				newVrf.Name = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "description" {
-				newVrf.Description = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "enabled" {
-				newVrf.Enabled = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "isDefault" {
-				newVrf.IsDefault = basetypes.NewBoolValue(attributeValue.(bool))
-			} else if attributeName == "asn" {
-				newVrf.Asn = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "vni" {
-				newVrf.Vni = basetypes.NewFloat64Value(attributeValue.(float64))
-			} else if attributeName == "routeTarget" {
-				newVrf.RouteTarget = basetypes.NewStringValue(attributeValue.(string))
-			} else if attributeName == "metadata" {
-				newVrf.Metadata = NewMetadataObject(ctx, attributeValue.(map[string]interface{}))
-			} else if attributeName == "labels" {
-				newVrf.Labels = NewSetString(ctx, attributeValue.([]interface{}))
-			} else if attributeName == "annotations" {
-				newVrf.Annotations = NewAnnotationsSet(ctx, attributeValue.([]interface{}))
-			}
-		}
-	} else {
+	if requestData == nil || !requestData.Found {
 		newVrf.Id = basetypes.NewStringNull()
+		*data = newVrf
+		return false
+	}
+
+	var response vrfAPIResponse
+	if !decodeRestResult(diags, requestData, &response, "VRF") {
+		return true
+	}
+
+	if response.FabricId != nil {
+		newVrf.FabricId = basetypes.NewStringValue(*response.FabricId)
+	}
+	vrfID, ok := requireAPIIdentifier(diags, response.Id, "VRF")
+	if !ok {
+		return true
+	}
+	newVrf.VrfId = basetypes.NewStringValue(vrfID)
+	newVrf.Id = basetypes.NewStringValue(fmt.Sprintf("%s/vrfs/%s", newVrf.FabricId.ValueString(), newVrf.VrfId.ValueString()))
+	if response.Name != nil {
+		newVrf.Name = basetypes.NewStringValue(*response.Name)
+	}
+	if response.Description != nil {
+		newVrf.Description = basetypes.NewStringValue(*response.Description)
+	}
+	if response.Enabled != nil {
+		newVrf.Enabled = basetypes.NewBoolValue(*response.Enabled)
+	}
+	if response.IsDefault != nil {
+		newVrf.IsDefault = basetypes.NewBoolValue(*response.IsDefault)
+	}
+	if response.ASN != nil {
+		newVrf.Asn = basetypes.NewFloat64Value(*response.ASN)
+	}
+	if response.VNI != nil {
+		newVrf.Vni = basetypes.NewFloat64Value(*response.VNI)
+	}
+	if response.RouteTarget != nil {
+		newVrf.RouteTarget = basetypes.NewStringValue(*response.RouteTarget)
+	}
+	if response.Metadata != nil {
+		newVrf.Metadata = NewMetadataObject(ctx, response.Metadata)
+	}
+	if response.Labels != nil {
+		newVrf.Labels = NewSetString(ctx, response.Labels)
+	}
+	if response.Annotations != nil {
+		newVrf.Annotations = NewAnnotationsSet(ctx, response.Annotations)
 	}
 	*data = newVrf
+	return true
 }
 
 func getVrfJsonPayload(ctx context.Context, diags *diag.Diagnostics, data *VrfResourceModel, action string) *gabs.Container {
